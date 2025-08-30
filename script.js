@@ -27,21 +27,29 @@ let selectedMessage = null; // Выбранное сообщение для ко
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async function() {
-    // Загружаем всех пользователей из Firebase
-    await loadAllUsersFromFirebase();
-    
-    // Проверяем, есть ли сохраненный пользователь
-    const savedUser = localStorage.getItem('astralesUser');
-    if (savedUser) {
-        currentUser = JSON.parse(savedUser);
-        isLoggedIn = true;
-        showChatList();
+    try {
+        // Загружаем всех пользователей из Firebase
+        await loadAllUsersFromFirebase();
+        
+        // Настраиваем слушатель изменений в реальном времени
+        setupRealtimeUsersListener();
+        
+        // Проверяем, есть ли сохраненный пользователь
+        const savedUser = localStorage.getItem('astralesUser');
+        if (savedUser) {
+            currentUser = JSON.parse(savedUser);
+            isLoggedIn = true;
+            showChatList();
+        }
+    } catch (error) {
+        console.error('Ошибка при инициализации:', error);
     }
 });
 
 // Загрузка всех пользователей из Firebase
 async function loadAllUsersFromFirebase() {
     try {
+        console.log('Загружаем пользователей из Firebase...');
         const usersSnapshot = await getDocs(collection(db, "users"));
         allUsers = [];
         
@@ -56,6 +64,8 @@ async function loadAllUsersFromFirebase() {
             });
         });
         
+        console.log('Загружено пользователей:', allUsers.length);
+        
         // Сохраняем в localStorage для кэширования
         localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
     } catch (error) {
@@ -67,6 +77,58 @@ async function loadAllUsersFromFirebase() {
         } else {
             allUsers = [];
         }
+    }
+}
+
+// Настройка слушателя изменений пользователей в реальном времени
+function setupRealtimeUsersListener() {
+    try {
+        onSnapshot(collection(db, "users"), (snapshot) => {
+            console.log('Обновление списка пользователей в реальном времени...');
+            allUsers = [];
+            
+            snapshot.forEach(doc => {
+                const userData = doc.data();
+                allUsers.push({
+                    id: doc.id,
+                    username: userData.username,
+                    avatar: userData.avatar || null,
+                    online: userData.online || false,
+                    lastSeen: userData.lastSeen || null
+                });
+            });
+            
+            console.log('Обновлено пользователей:', allUsers.length);
+            
+            // Сохраняем в localStorage
+            localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
+            
+            // Обновляем интерфейс, если пользователь находится в списке чатов
+            if (isLoggedIn && document.getElementById('chatList').classList.contains('hidden') === false) {
+                updateChatsList();
+            }
+        });
+    } catch (error) {
+        console.error('Ошибка при настройке слушателя пользователей:', error);
+    }
+}
+
+// Принудительное обновление списка пользователей
+async function refreshUsersList() {
+    try {
+        console.log('Принудительное обновление списка пользователей...');
+        await loadAllUsersFromFirebase();
+        
+        // Обновляем интерфейс, если пользователь находится в списке чатов
+        if (isLoggedIn && document.getElementById('chatList').classList.contains('hidden') === false) {
+            updateChatsList();
+        }
+        
+        // Показываем уведомление
+        alert('Список пользователей обновлен!');
+    } catch (error) {
+        console.error('Ошибка при обновлении списка пользователей:', error);
+        alert('Ошибка при обновлении списка пользователей');
     }
 }
 
@@ -290,13 +352,16 @@ async function handleRegister(event) {
 }
 
 // Показать список чатов
-function showChatList() {
+async function showChatList() {
     document.getElementById('loginForm').classList.add('hidden');
     document.getElementById('chatList').classList.remove('hidden');
     document.getElementById('userChat').classList.add('hidden');
     
     // Обновляем аватар в интерфейсе
     updateUserAvatar();
+    
+    // Принудительно обновляем список пользователей из Firebase
+    await loadAllUsersFromFirebase();
     
     // Обновляем список чатов
     updateChatsList();
