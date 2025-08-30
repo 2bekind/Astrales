@@ -14,6 +14,20 @@ import {
     where
 } from './firebase.js';
 
+// Импорт модуля настроек чата
+import { 
+    openChatSettings, 
+    closeChatSettings, 
+    handleWallpaperUpload, 
+    resetWallpaper,
+    loadChatWallpapers,
+    applyCurrentChatWallpaper,
+    initializeChatSettings,
+    applyChatWallpaper,
+    setCurrentUser,
+    setCurrentChat
+} from './chatSettings.js';
+
 // Глобальные переменные
 let currentUser = null;
 let isLoggedIn = false;
@@ -31,38 +45,62 @@ let currentPinnedMessage = null; // Текущее закрепленное со
 // Глобальная переменная для состояния звука
 let soundEnabled = true;
 
+// Глобальные переменные для обоев чата
+let chatWallpapers = {}; // {chatId: wallpaperUrl}
+let longPressTimer = null;
+let isLongPress = false;
+
 // Функция воспроизведения звука уведомления
 function playMessageSound(senderId = null) {
     if (!soundEnabled) return; // Не воспроизводим звук если он отключен
     
-    try {
-        const audio = document.getElementById('messageSound');
-        if (audio) {
-            audio.volume = 0.3; // Устанавливаем громкость на 30%
-            audio.currentTime = 0; // Сбрасываем время воспроизведения
-            audio.play().catch(error => {
-                console.log('Не удалось воспроизвести звук:', error);
-            });
+    // Проверяем, что страница не в фокусе или пользователь не в активном чате
+    const isPageActive = !document.hidden && document.hasFocus();
+    const isInActiveChat = currentChat && 
+        (senderId === currentChat.id) &&
+        !document.getElementById('userChat').classList.contains('hidden');
+    
+    // Воспроизводим звук только если страница не в фокусе или не в активном чате
+    if (!isPageActive || !isInActiveChat) {
+        try {
+            const audio = document.getElementById('messageSound');
+            if (audio) {
+                audio.volume = 0.3; // Устанавливаем громкость на 30%
+                audio.currentTime = 0; // Сбрасываем время воспроизведения
+                audio.play().catch(error => {
+                    console.log('Не удалось воспроизвести звук:', error);
+                });
+            }
+        } catch (error) {
+            console.log('Ошибка при воспроизведении звука:', error);
         }
-    } catch (error) {
-        console.log('Ошибка при воспроизведении звука:', error);
     }
 }
 
 // Функция переключения звука
 function toggleSound() {
     soundEnabled = !soundEnabled;
-    const soundButton = document.getElementById('soundButton');
     
-    if (soundEnabled) {
-        soundButton.textContent = '🔊';
-        soundButton.classList.remove('muted');
-        soundButton.title = 'Звук уведомлений (включен)';
-    } else {
-        soundButton.textContent = '🔇';
-        soundButton.classList.add('muted');
-        soundButton.title = 'Звук уведомлений (выключен)';
-    }
+    // Обновляем состояние кнопок звука
+    const soundButton = document.getElementById('soundButton');
+    const soundButtonList = document.getElementById('soundButtonList');
+    
+    const updateSoundButton = (button) => {
+        if (button) {
+            if (soundEnabled) {
+                button.textContent = '🔊';
+                button.classList.remove('muted');
+                button.title = 'Звук уведомлений (включен)';
+            } else {
+                button.textContent = '🔇';
+                button.classList.add('muted');
+                button.title = 'Звук уведомлений (выключен)';
+            }
+        }
+    };
+    
+    updateSoundButton(soundButton);
+    updateSoundButton(soundButtonList);
     
     // Сохраняем настройку в localStorage
     localStorage.setItem('soundEnabled', soundEnabled);
@@ -74,6 +112,27 @@ function loadSoundSettings() {
     if (savedSoundSetting !== null) {
         soundEnabled = JSON.parse(savedSoundSetting);
     }
+    
+    // Обновляем состояние кнопок звука
+    const soundButton = document.getElementById('soundButton');
+    const soundButtonList = document.getElementById('soundButtonList');
+    
+    const updateSoundButton = (button) => {
+        if (button) {
+            if (soundEnabled) {
+                button.textContent = '🔊';
+                button.classList.remove('muted');
+                button.title = 'Звук уведомлений (включен)';
+            } else {
+                button.textContent = '🔇';
+                button.classList.add('muted');
+                button.title = 'Звук уведомлений (выключен)';
+            }
+        }
+    };
+    
+    updateSoundButton(soundButton);
+    updateSoundButton(soundButtonList);
 }
 
 
@@ -172,6 +231,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (savedUser) {
             currentUser = JSON.parse(savedUser);
             isLoggedIn = true;
+            
+            // Устанавливаем текущего пользователя в модуле настроек
+            setCurrentUser(currentUser);
+            
             hideLoadingScreen();
             showChatList();
         } else {
@@ -187,6 +250,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // Останавливаем анимацию точек
         clearInterval(loadingInterval);
+        
+        // Добавляем новые инициализации
+        setupLongPressHandlers();
+        setupMobileAutoRefresh();
+        // Загружаем обои до инициализации настроек, чтобы кэш был готов
+        await loadChatWallpapers();
+        
+        // Инициализируем настройки чата
+        initializeChatSettings();
         
     } catch (error) {
         console.error('Ошибка при инициализации:', error);
@@ -209,7 +281,8 @@ async function loadAllUsersFromFirebase() {
                 avatar: userData.avatar || null,
                 online: userData.online || false,
                 lastSeen: userData.lastSeen || null,
-                selectedFrame: userData.selectedFrame || null
+                selectedFrame: userData.selectedFrame || null,
+                bio: userData.bio || null
             });
         });
         
@@ -245,7 +318,8 @@ function setupRealtimeUsersListener() {
                     avatar: userData.avatar || null,
                     online: userData.online || false,
                     lastSeen: userData.lastSeen || null,
-                    selectedFrame: userData.selectedFrame || null
+                    selectedFrame: userData.selectedFrame || null,
+                    bio: userData.bio || null
                 });
             });
             
@@ -279,15 +353,8 @@ function setupRealtimeUsersListener() {
                 
                 // Если это новое сообщение и мы получатель
                 if (change.type === 'added' && messageData.receiverId === currentUser.id) {
-                    // Проверяем, не находимся ли мы в активном чате с отправителем
-                    const isInActiveChat = currentChat && 
-                        (messageData.senderId === currentChat.id || messageData.receiverId === currentChat.id) &&
-                        !document.getElementById('userChat').classList.contains('hidden');
-                    
-                    // Воспроизводим звук только если не в активном чате с отправителем
-                    if (!isInActiveChat) {
-                        playMessageSound(messageData.senderId);
-                    }
+                    // Воспроизводим звук уведомления
+                    playMessageSound(messageData.senderId);
                 }
             });
             
@@ -402,19 +469,21 @@ async function saveUserToAllUsers(user) {
     // Сохраняем в localStorage
     localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
     
-    // Также обновляем в Firebase (если это не новый пользователь)
-    if (user.id) {
-        try {
-            await setDoc(doc(db, "users", user.id), {
-                username: user.username,
-                avatar: user.avatar,
-                online: user.online,
-                lastSeen: Date.now()
-            }, { merge: true });
-        } catch (error) {
-            console.error('Ошибка при сохранении пользователя в Firebase:', error);
+            // Также обновляем в Firebase (если это не новый пользователь)
+        if (user.id) {
+            try {
+                await setDoc(doc(db, "users", user.id), {
+                    username: user.username,
+                    avatar: user.avatar,
+                    online: user.online,
+                    lastSeen: Date.now(),
+                    selectedFrame: user.selectedFrame,
+                    bio: user.bio
+                }, { merge: true });
+            } catch (error) {
+                console.error('Ошибка при сохранении пользователя в Firebase:', error);
+            }
         }
-    }
 }
 
 // Открыть модальное окно профиля пользователя
@@ -426,6 +495,7 @@ function openUserProfileModal() {
     const username = document.getElementById('userProfileUsername');
     const statusIndicator = document.getElementById('userProfileStatusIndicator');
     const statusText = document.getElementById('userProfileStatusText');
+    const bioContainer = document.getElementById('userProfileBio');
     
     // Заполняем данные пользователя
     avatar.src = getUserAvatar(currentChat);
@@ -448,6 +518,15 @@ function openUserProfileModal() {
     } else {
         statusIndicator.className = 'status-indicator offline';
         statusText.textContent = 'Не в сети';
+    }
+    
+    // Отображаем описание профиля
+    if (currentChat.bio && currentChat.bio.trim()) {
+        bioContainer.innerHTML = `<p>${currentChat.bio}</p>`;
+        bioContainer.classList.remove('empty');
+    } else {
+        bioContainer.innerHTML = '<p class="empty">Описание не указано</p>';
+        bioContainer.classList.add('empty');
     }
     
     // Добавляем премиум индикатор если нужно
@@ -531,8 +610,12 @@ async function handleLogin(event) {
                 avatar: userDataObj.avatar || null,
                 online: true,
                 lastSeen: null,
-                selectedFrame: userDataObj.selectedFrame || null
+                selectedFrame: userDataObj.selectedFrame || null,
+                bio: userDataObj.bio || null
             };
+            
+            // Устанавливаем текущего пользователя в модуле настроек
+            setCurrentUser(currentUser);
             
             // Сохраняем в localStorage
             localStorage.setItem('astralesUser', JSON.stringify(currentUser));
@@ -589,13 +672,15 @@ async function handleRegister(event) {
             id: cred.user.uid,
             username: username,
             avatar: null,
-            online: true
+            online: true,
+            bio: null
         };
         
         // Сохраняем в Firestore
         await setDoc(doc(db, "users", cred.user.uid), {
             username: username,
             online: true,
+            bio: null,
             created: Date.now()
         });
         
@@ -647,6 +732,9 @@ async function handleLogout() {
     currentUser = null;
     isLoggedIn = false;
     
+    // Устанавливаем текущего пользователя в модуле настроек
+    setCurrentUser(null);
+    
     // Удаляем пользователя из localStorage
     localStorage.removeItem('astralesUser');
     
@@ -668,6 +756,8 @@ function openProfileSettings() {
     const modal = document.getElementById('profileModal');
     const modalAvatar = document.getElementById('modalAvatar');
     const usernameInput = document.getElementById('newUsername');
+    const bioInput = document.getElementById('newBio');
+    const bioCounter = document.getElementById('bioCounter');
     
     // Заполняем текущими данными
     if (currentUser.avatar) {
@@ -683,6 +773,8 @@ function openProfileSettings() {
     }
     
     usernameInput.value = currentUser.username;
+    bioInput.value = currentUser.bio || '';
+    bioCounter.textContent = (currentUser.bio || '').length;
     
     // Добавляем премиум индикатор если нужно
     if (isPremiumUser(currentUser.username)) {
@@ -718,8 +810,12 @@ async function handleAvatarUpload(event) {
             try {
                 // Сохраняем аватар в Firestore
                 await setDoc(doc(db, "users", currentUser.id), {
+                    username: currentUser.username,
                     avatar: avatarData,
-                    lastSeen: Date.now()
+                    online: currentUser.online,
+                    lastSeen: Date.now(),
+                    selectedFrame: currentUser.selectedFrame,
+                    bio: currentUser.bio
                 }, { merge: true });
                 
                 // Обновляем localStorage текущего пользователя
@@ -744,6 +840,7 @@ async function handleAvatarUpload(event) {
 // Сохранение изменений профиля
 async function saveProfileChanges() {
     const newUsername = document.getElementById('newUsername').value.trim();
+    const newBio = document.getElementById('newBio').value.trim();
     
     if (newUsername && newUsername !== currentUser.username) {
         // Проверяем, не занято ли имя пользователя
@@ -756,13 +853,17 @@ async function saveProfileChanges() {
         currentUser.username = newUsername;
     }
     
+    // Обновляем описание
+    currentUser.bio = newBio || null;
+    
     try {
         // Сохраняем изменения в Firestore
         await setDoc(doc(db, "users", currentUser.id), {
             username: currentUser.username,
             avatar: currentUser.avatar,
             online: currentUser.online,
-            lastSeen: Date.now()
+            lastSeen: Date.now(),
+            bio: currentUser.bio
         }, { merge: true });
         
         // Обновляем localStorage
@@ -943,6 +1044,9 @@ async function openUserChat(user) {
         onlineStatus.classList.add('offline');
     }
     
+    // Сообщаем модулю настроек чатов какой чат активен
+    setCurrentChat(user);
+
     // Загружаем закрепленное сообщение
     const chatId = getChatId(currentUser.id, user.id);
     await loadPinnedMessage(chatId);
@@ -957,6 +1061,9 @@ async function openUserChat(user) {
     
     // Загружаем настройки звука для кнопки в чате
     loadSoundSettings();
+    
+    // Применяем обои для чата
+    applyCurrentChatWallpaper();
 }
 
 // Вернуться к списку чатов
@@ -1111,6 +1218,9 @@ function createMessageElement(message) {
     // Добавляем обработчик правого клика для своих сообщений
     if (message.senderId === currentUser.id) {
         div.addEventListener('contextmenu', (event) => showMessageContextMenu(event, message));
+        
+        // Добавляем класс для мобильных устройств
+        div.classList.add('message-item');
     }
     
     return div;
@@ -1171,6 +1281,14 @@ async function sendMessage() {
             
             // Обновляем список чатов
             updateChatsList();
+            
+            // На мобильных устройствах принудительно обновляем сообщения
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (isMobile) {
+                setTimeout(() => {
+                    refreshChatMessages();
+                }, 1000);
+            }
         } catch (error) {
             console.error('Ошибка при отправке сообщения:', error);
         }
@@ -1867,6 +1985,10 @@ function showMessageContextMenu(event, message) {
     selectedMessage = message;
     const contextMenu = document.getElementById('messageContextMenu');
     
+    // Определяем тип события для мобильных устройств
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isTouchEvent = event.type === 'touchstart' || event.type === 'touchend';
+    
     // Получаем размеры меню и экрана
     const menuWidth = 180; // Ширина меню из CSS
     const menuHeight = 80; // Примерная высота меню
@@ -1874,17 +1996,27 @@ function showMessageContextMenu(event, message) {
     const screenHeight = window.innerHeight;
     
     // Вычисляем позицию с учетом границ экрана
-    let left = event.pageX;
-    let top = event.pageY;
+    let left, top;
+    
+    if (isMobile && isTouchEvent) {
+        // Для мобильных устройств используем координаты касания
+        const touch = event.touches ? event.touches[0] : event.changedTouches[0];
+        left = touch.clientX;
+        top = touch.clientY;
+    } else {
+        // Для десктопа используем координаты мыши
+        left = event.pageX;
+        top = event.pageY;
+    }
     
     // Если меню выходит за правый край, смещаем влево
     if (left + menuWidth > screenWidth) {
-        left = event.pageX - menuWidth;
+        left = left - menuWidth;
     }
     
     // Если меню выходит за нижний край, смещаем вверх
     if (top + menuHeight > screenHeight) {
-        top = event.pageY - menuHeight;
+        top = top - menuHeight;
     }
     
     // Позиционируем меню
@@ -1895,6 +2027,9 @@ function showMessageContextMenu(event, message) {
     // Добавляем обработчик для скрытия меню при клике вне его
     setTimeout(() => {
         document.addEventListener('click', hideMessageContextMenu);
+        if (isMobile) {
+            document.addEventListener('touchstart', hideMessageContextMenu);
+        }
     }, 100);
 }
 
@@ -1903,6 +2038,7 @@ function hideMessageContextMenu() {
     contextMenu.classList.add('hidden');
     selectedMessage = null;
     document.removeEventListener('click', hideMessageContextMenu);
+    document.removeEventListener('touchstart', hideMessageContextMenu);
 }
 
 // Показать модальное окно очистки чатов
@@ -2274,6 +2410,26 @@ window.purchaseElixium = purchaseElixium;
 window.openFramesModal = openFramesModal;
 window.closeFramesModal = closeFramesModal;
 window.selectFrame = selectFrame;
+window.toggleSound = toggleSound;
+window.updateBioCounter = updateBioCounter;
+
+// Функция обновления счетчика символов в описании
+function updateBioCounter() {
+    const bioInput = document.getElementById('newBio');
+    const bioCounter = document.getElementById('bioCounter');
+    
+    if (bioInput && bioCounter) {
+        const length = bioInput.value.length;
+        bioCounter.textContent = length;
+        
+        // Меняем цвет счетчика если превышен лимит
+        if (length > 200) {
+            bioCounter.style.color = '#ff4444';
+        } else {
+            bioCounter.style.color = '#888';
+        }
+    }
+}
 
 // Функции для работы с рамками
 function openFramesModal() {
@@ -2376,6 +2532,11 @@ function handleWindowFocus() {
     if (isLoggedIn && currentUser) {
         // Окно получило фокус - устанавливаем онлайн
         setUserOnlineStatus(true);
+        // Если открыт чат — гарантированно применяем обои после фокуса/перезагрузки
+        if (currentChat) {
+            setCurrentChat(currentChat);
+            applyCurrentChatWallpaper();
+        }
     }
 }
 
@@ -2392,8 +2553,12 @@ async function setUserOnlineStatus(online) {
     try {
         const userRef = doc(db, "users", currentUser.id);
         await setDoc(userRef, {
+            username: currentUser.username,
+            avatar: currentUser.avatar,
             online: online,
-            lastSeen: online ? null : Date.now()
+            lastSeen: online ? null : Date.now(),
+            selectedFrame: currentUser.selectedFrame,
+            bio: currentUser.bio
         }, { merge: true });
         
         // Обновляем локальное состояние
@@ -2405,4 +2570,140 @@ async function setUserOnlineStatus(online) {
     } catch (error) {
         console.error('Ошибка при обновлении статуса:', error);
     }
+}
+
+// Функция для долгого нажатия на мобильных устройствах
+function setupLongPressHandlers() {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+        // Добавляем обработчики для сообщений
+        document.addEventListener('touchstart', handleTouchStart, { passive: false });
+        document.addEventListener('touchend', handleTouchEnd, { passive: false });
+        document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    }
+}
+
+function handleTouchStart(event) {
+    const messageItem = event.target.closest('.message-item');
+    if (!messageItem) return;
+    
+    longPressTimer = setTimeout(() => {
+        isLongPress = true;
+        messageItem.classList.add('long-press');
+        showMessageContextMenu(event, messageItem);
+    }, 1000);
+}
+
+function handleTouchEnd(event) {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+    
+    if (isLongPress) {
+        isLongPress = false;
+        const messageItem = event.target.closest('.message-item');
+        if (messageItem) {
+            messageItem.classList.remove('long-press');
+        }
+    }
+}
+
+function handleTouchMove(event) {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+    
+    if (isLongPress) {
+        isLongPress = false;
+        const messageItem = event.target.closest('.message-item');
+        if (messageItem) {
+            messageItem.classList.remove('long-press');
+        }
+    }
+}
+
+// Функции для управления обоями чата теперь находятся в chatSettings.js
+
+// Функция автообновления для мобильных устройств
+function setupMobileAutoRefresh() {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+        // Автообновление каждые 5 секунд на мобильных устройствах
+        setInterval(() => {
+            if (isLoggedIn && currentChat) {
+                refreshChatMessages();
+            }
+        }, 5000);
+        
+        // Обновление при возвращении в приложение
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && isLoggedIn && currentChat) {
+                refreshChatMessages();
+            }
+        });
+    }
+}
+
+// Функция обновления сообщений чата
+async function refreshChatMessages() {
+    if (!currentChat) return;
+    
+    try {
+        // Обновляем сообщения
+        await loadChatMessages(currentChat.id);
+        
+        // Обновляем список чатов
+        await loadChatsList();
+        
+        console.log('Чат обновлен');
+    } catch (error) {
+        console.error('Ошибка при обновлении чата:', error);
+    }
+}
+
+// Глобальные функции для доступа из HTML
+window.openChatSettingsWrapper = function() {
+    if (!currentChat) {
+        console.error('Нет активного чата');
+        return;
+    }
+    openChatSettings(currentChat, allUsers);
+};
+
+window.closeChatSettingsWrapper = function() {
+    closeChatSettings();
+};
+
+window.handleWallpaperUpload = function(event) {
+    handleWallpaperUpload(event);
+};
+
+window.resetWallpaper = function() {
+    resetWallpaper();
+};
+
+// Обновляем функцию инициализации приложения
+function initializeApp() {
+    // ... existing initialization code ...
+    
+    // Добавляем новые инициализации
+    setupLongPressHandlers();
+    setupMobileAutoRefresh();
+    loadChatWallpapers();
+    
+    // ... rest of initialization code ...
+}
+
+// Обновляем функцию открытия чата
+function openChat(userId) {
+    // ... existing code ...
+    
+    // Применяем обои для чата
+    applyCurrentChatWallpaper();
+    
+    // ... rest of existing code ...
 }

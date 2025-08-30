@@ -17,6 +17,10 @@ body {
     overflow-x: hidden;
 }
 
+:root {
+    --chat-header-h: 72px;
+}
+
 /* Экран загрузки */
 .loading-screen {
     position: fixed;
@@ -29,6 +33,29 @@ body {
     align-items: center;
     justify-content: center;
     z-index: 9999;
+}
+
+/* Кнопка настроек чата */
+.chat-settings-button {
+    background: none;
+    border: none;
+    color: #e0e0e0;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-settings-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.chat-settings-button:active {
+    transform: scale(0.95);
 }
 
 .loading-content {
@@ -252,9 +279,13 @@ body {
     border-bottom: 1px solid #3a3a3a;
     background: #2d2d2d;
     flex-shrink: 0;
+    position: relative;
+    z-index: 200;
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
 }
 
-.chat-header h2 {
+.chat-header р  {
     color: white;
     font-size: 24px;
     font-weight: 600;
@@ -350,7 +381,7 @@ body {
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     min-width: 180px;
-    z-index: 1000;
+    z-index: 10000;
     margin-top: 8px;
 }
 
@@ -380,10 +411,17 @@ body {
     border-bottom: 1px solid #3a3a3a;
     background: #2d2d2d;
     flex-shrink: 0;
+    position: relative;
+    z-index: 100;
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
 }
 
 .search-container {
     width: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
 }
 
 .search-input {
@@ -406,6 +444,29 @@ body {
     border-color: #0088cc;
     background: #404040;
     box-shadow: 0 0 0 3px rgba(0, 136, 204, 0.2);
+}
+
+.sound-button-list {
+    background: #4a4a4a;
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.2s ease;
+    margin-left: 10px;
+    flex-shrink: 0;
+}
+
+.sound-button-list:hover {
+    background: #5a5a5a;
+    transform: scale(1.1);
+}
+
+.sound-button-list.muted {
+    opacity: 0.5;
 }
 
 /* Результаты поиска */
@@ -801,6 +862,7 @@ body {
     padding: 20px 30px;
     overflow-y: auto;
     background: #1E1E1E;
+    position: relative;
 }
 
 .empty-chat {
@@ -1044,12 +1106,15 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 2000;
+}
+
+/* Модальное окно настроек чата должно быть поверх backdrop */
+#chatSettingsModal {
+    z-index: 2001;
 }
 
 .modal-content {
@@ -1062,6 +1127,8 @@ body {
     border: 1px solid #3a3a3a;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
 }
+
+/* Исключение для модального окна настроек чата - стили определены ниже */
 
 /* Модальное окно для изображений */
 .image-modal-content {
@@ -1198,6 +1265,27 @@ body {
     font-size: 16px;
 }
 
+.user-profile-bio {
+    margin-top: 15px;
+    padding: 15px;
+    background: #3a3a3a;
+    border-radius: 12px;
+    border: 1px solid #4a4a4a;
+}
+
+.user-profile-bio p {
+    color: #e0e0e0;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+    font-style: italic;
+}
+
+.user-profile-bio.empty {
+    color: #888;
+    font-style: italic;
+}
+
 .user-profile-actions {
     margin-top: 30px;
 }
@@ -1326,6 +1414,44 @@ body {
     background: #4a4a4a;
     cursor: not-allowed;
     transform: none;
+}
+
+.bio-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.bio-section label {
+    color: #e0e0e0;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.bio-input {
+    padding: 12px 16px;
+    background: #3a3a3a;
+    border: 2px solid #4a4a4a;
+    border-radius: 16px;
+    font-size: 16px;
+    color: #e0e0e0;
+    transition: all 0.2s ease;
+    outline: none;
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+}
+
+.bio-input:focus {
+    border-color: #0088cc;
+    background: #404040;
+}
+
+.bio-counter {
+    text-align: right;
+    color: #888;
+    font-size: 12px;
+    margin-top: -10px;
 }
 
 /* Модальные окна звонков */
@@ -1492,9 +1618,8 @@ body {
     border: 1px solid #444;
     border-radius: 16px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    z-index: 1000;
+    z-index: 6000;
     min-width: 180px;
-    backdrop-filter: blur(10px);
 }
 
 /* Контекстное меню для чатов */
@@ -1504,9 +1629,8 @@ body {
     border: 1px solid #444;
     border-radius: 16px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    z-index: 1000;
+    z-index: 6000;
     min-width: 180px;
-    backdrop-filter: blur(10px);
 }
 
 .context-menu-item {
@@ -1879,4 +2003,602 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #5a5a5a;
+}
+
+/* Кнопка настроек чата */
+.settings-button {
+    background: none;
+    border: none;
+    color: #e0e0e0;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-button:hover {
+    background: #3a3a3a;
+    color: #ffffff;
+}
+
+.settings-button svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Модальное окно настроек чата */
+.chat-settings-modal {
+    max-width: 500px;
+    width: 90%;
+    position: relative;
+    z-index: 2001;
+    background: #2d2d2d;
+    border-radius: 24px;
+    border: 1px solid #3a3a3a;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    margin: auto;
+    transform: translateZ(0);
+}
+
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 2000;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
+
+/* Backdrop для модального окна настроек чата */
+#chatSettingsModal .modal-backdrop {
+    z-index: 2000;
+}
+
+/* Для модальных окон без backdrop добавляем фон */
+.modal:not(:has(.modal-backdrop)) {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.chat-settings-section {
+    margin-bottom: 30px;
+}
+
+.chat-settings-section h4 {
+    color: #e0e0e0;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 15px;
+}
+
+.chat-partner-profile {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: #3a3a3a;
+    border-radius: 12px;
+    border: 1px solid #4a4a4a;
+}
+
+.chat-partner-profile .avatar-container {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.chat-partner-profile .avatar-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.chat-partner-info h5 {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.wallpaper-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.current-wallpaper {
+    position: relative;
+    width: 100%;
+    height: 150px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #3a3a3a;
+    border: 1px solid #4a4a4a;
+}
+
+.wallpaper-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.wallpaper-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.wallpaper-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.upload-wallpaper-button,
+.reset-wallpaper-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.upload-wallpaper-button {
+    background: #0088cc;
+    color: white;
+}
+
+.upload-wallpaper-button:hover {
+    background: #0077b3;
+}
+
+.reset-wallpaper-button {
+    background: #4a4a4a;
+    color: #e0e0e0;
+}
+
+.reset-wallpaper-button:hover {
+    background: #5a5a5a;
+    color: #ffffff;
+}
+
+/* Обои чата */
+.user-chat {
+    position: relative;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+.user-chat::before {
+    content: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: transparent;
+    z-index: 0;
+}
+
+/* Контейнер сообщений с обоями */
+.chat-messages {
+    position: relative;
+    z-index: 1;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+.chat-messages::before {
+    content: '';
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--chat-header-h, 72px);
+    background: rgba(30, 30, 30, 0.35);
+    backdrop-filter: blur(10px) saturate(120%);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+    z-index: 5;
+}
+
+.user-chat > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Мобильные улучшения */
+@media (max-width: 768px) {
+    /* Улучшенная кнопка плюс для мобильных */
+    .send-image-button {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: #0088cc;
+        border: none;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+    
+    .send-image-button:hover {
+        background: #0077b3;
+        transform: scale(1.05);
+    }
+    
+    .send-image-button svg {
+        width: 20px;
+        height: 20px;
+    }
+    
+    /* Долгое нажатие для контекстного меню на мобильных */
+    .message-item {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+    
+    /* Улучшенные кнопки в чате для мобильных */
+    .chat-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .back-button,
+    .settings-button,
+    .call-button,
+    .sound-button {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: #3a3a3a;
+        border: none;
+        color: #e0e0e0;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+    
+    .back-button:hover,
+    .settings-button:hover,
+    .call-button:hover,
+    .sound-button:hover {
+        background: #4a4a4a;
+        color: #ffffff;
+        transform: scale(1.05);
+    }
+    
+    .call-button {
+        background: #28a745;
+        color: white;
+    }
+    
+    .call-button:hover {
+        background: #218838;
+    }
+    
+    /* Улучшенное модальное окно настроек для мобильных */
+    .chat-settings-modal {
+        width: 95%;
+        max-width: none;
+        margin: 10px;
+    }
+    
+    .wallpaper-actions {
+        flex-direction: column;
+    }
+    
+    .upload-wallpaper-button,
+    .reset-wallpaper-button {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Анимация для долгого нажатия */
+@keyframes longPress {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(0.95);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.message-item.long-press {
+    animation: longPress 0.3s ease;
+}
+
+/* Блюр для модального окна - удаляем дублирующиеся стили */
+
+/* Обои чата */
+.chat-messages {
+    position: relative;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    min-height: 400px;
+}
+
+.chat-messages::before {
+    content: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: transparent;
+    z-index: 1;
+}
+
+.chat-messages > * {
+    position: relative;
+    z-index: 2;
+}
+
+/* Улучшенные стили для номера чата */
+.chat-user-details {
+    position: relative;
+}
+
+.chat-number {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: linear-gradient(135deg, #8B5CF6, #A855F7);
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    border: 2px solid #1E1E1E;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+    }
+    50% {
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.5);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+    }
+}
+
+/* Стили для мобильных устройств */
+@media (max-width: 768px) {
+    .chat-settings-button {
+        padding: 10px;
+    }
+    
+    .chat-number {
+        width: 18px;
+        height: 18px;
+        font-size: 11px;
+    }
+    
+    .chat-messages {
+        min-height: 300px;
+    }
+    
+    /* Улучшенные стили для долгого нажатия */
+    .message-item {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        transition: all 0.2s ease;
+    }
+    
+    .message-item.long-press {
+        background: rgba(139, 92, 246, 0.2);
+        border-radius: 8px;
+        transform: scale(0.98);
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    }
+    
+    /* Улучшенные стили для контекстного меню на мобильных */
+    .message-context-menu {
+        position: fixed;
+        background: rgba(30, 30, 30, 0.95);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 8px 0;
+        min-width: 160px;
+        z-index: 10000;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* Адаптивные стили для обоев */
+@media (max-width: 480px) {
+    .chat-messages {
+        background-size: cover;
+        background-position: center;
+    }
+    
+    .chat-messages::before {
+        background: transparent;
+    }
+}
+
+/* Стили для предварительного просмотра обоев */
+.wallpaper-preview {
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.wallpaper-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.current-wallpaper {
+    position: relative;
+    margin-bottom: 16px;
+}
+
+/* Улучшенные стили для кнопок загрузки обоев */
+.upload-wallpaper-button,
+.reset-wallpaper-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 8px;
+    color: #e0e0e0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.upload-wallpaper-button:hover,
+.reset-wallpaper-button:hover {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: rgba(139, 92, 246, 0.5);
+    color: #ffffff;
+}
+
+.wallpaper-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Матовое стекло (iOS‑style) */
+.glass {
+    background: rgba(32, 32, 32, 0.45);
+    backdrop-filter: blur(12px) saturate(120%);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Применяем матовое стекло к ключевым блокам интерфейса */
+.chat-header,
+.search-section {
+    background: rgba(45, 45, 45, 0.45);
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chat-input-section {
+    background: rgba(45, 45, 45, 0.5);
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    position: sticky;
+    bottom: 0;
+    z-index: 150;
+}
+
+.profile-menu {
+    background: rgba(32, 32, 32, 0.6);
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.message-context-menu,
+.context-menu {
+    background: rgba(32, 32, 32, 0.6);
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pinned-message-container {
+    background: rgba(42, 42, 42, 0.55);
+    backdrop-filter: blur(10px) saturate(120%);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 768px) {
+    .chat-header,
+    .search-section,
+    .chat-input-section,
+    .profile-menu,
+    .message-context-menu,
+    .context-menu,
+    .pinned-message-container {
+        backdrop-filter: blur(10px) saturate(120%);
+        -webkit-backdrop-filter: blur(10px) saturate(120%);
+        background: rgba(40, 40, 40, 0.55);
+    }
 }
