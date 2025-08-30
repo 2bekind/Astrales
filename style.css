@@ -2540,6 +2540,11 @@ body {
     gap: 12px;
 }
 
+/* Временное скрытие премиум-иконки (не удаляем элемент/файл) */
+.premium-indicator {
+    display: none !important;
+}
+
 /* Матовое стекло (iOS‑style) */
 .glass {
     background: rgba(32, 32, 32, 0.45);
