@@ -83,6 +83,7 @@ async function loadAllUsersFromFirebase() {
 // Настройка слушателя изменений пользователей в реальном времени
 function setupRealtimeUsersListener() {
     try {
+        // Слушатель изменений пользователей
         onSnapshot(collection(db, "users"), (snapshot) => {
             console.log('Обновление списка пользователей в реальном времени...');
             allUsers = [];
@@ -108,6 +109,17 @@ function setupRealtimeUsersListener() {
                 updateChatsList();
             }
         });
+        
+        // Слушатель изменений чатов
+        onSnapshot(collection(db, "chats"), (snapshot) => {
+            console.log('Обновление чатов в реальном времени...');
+            
+            // Обновляем интерфейс, если пользователь находится в списке чатов
+            if (isLoggedIn && document.getElementById('chatList').classList.contains('hidden') === false) {
+                updateChatsList();
+            }
+        });
+        
     } catch (error) {
         console.error('Ошибка при настройке слушателя пользователей:', error);
     }
@@ -781,7 +793,7 @@ function handleMessageKeyPress(event) {
 }
 
 // Отправить сообщение
-function sendMessage() {
+async function sendMessage() {
     const messageInput = document.getElementById('messageInput');
     const messageText = messageInput.value.trim();
     
@@ -794,21 +806,60 @@ function sendMessage() {
             timestamp: Date.now()
         };
         
-        // Сохраняем сообщение
-        saveMessage(message);
-        
-        // Отображаем сообщение
-        addMessageToChat(message);
-        
-        // Очищаем поле ввода
-        messageInput.value = '';
-        
-        // Обновляем список чатов
-        updateChatsList();
+        try {
+            // Сохраняем сообщение в Firebase
+            await saveMessageToFirebase(message);
+            
+            // Сохраняем сообщение локально
+            saveMessage(message);
+            
+            // Отображаем сообщение
+            addMessageToChat(message);
+            
+            // Очищаем поле ввода
+            messageInput.value = '';
+            
+            // Обновляем список чатов
+            updateChatsList();
+        } catch (error) {
+            console.error('Ошибка при отправке сообщения:', error);
+            alert('Ошибка при отправке сообщения');
+        }
     }
 }
 
-// Сохранить сообщение
+// Сохранить сообщение в Firebase
+async function saveMessageToFirebase(message) {
+    try {
+        const chatId = getChatId(message.senderId, message.receiverId);
+        
+        // Сохраняем сообщение в коллекцию messages
+        await addDoc(collection(db, "messages"), {
+            chatId: chatId,
+            messageId: message.id,
+            text: message.text,
+            senderId: message.senderId,
+            receiverId: message.receiverId,
+            timestamp: message.timestamp,
+            createdAt: Date.now()
+        });
+        
+        // Обновляем или создаем запись в коллекции chats
+        await setDoc(doc(db, "chats", chatId), {
+            participants: [message.senderId, message.receiverId].sort(),
+            lastMessage: message.text,
+            lastMessageTime: message.timestamp,
+            lastMessageSender: message.senderId,
+            updatedAt: Date.now()
+        }, { merge: true });
+        
+    } catch (error) {
+        console.error('Ошибка при сохранении сообщения в Firebase:', error);
+        throw error;
+    }
+}
+
+// Сохранить сообщение локально
 function saveMessage(message) {
     const chatId = getChatId(message.senderId, message.receiverId);
     const messages = JSON.parse(localStorage.getItem(`chat_${chatId}`)) || [];
@@ -839,64 +890,96 @@ function getChatId(user1Id, user2Id) {
 }
 
 // Обновить список чатов
-function updateChatsList() {
+async function updateChatsList() {
     const chatsList = document.getElementById('chatsList');
     
-    // Получаем все чаты текущего пользователя
-    const userChats = getAllUserChats();
-    
-    if (userChats.length === 0) {
-        chatsList.innerHTML = '<div class="empty-state"><p class="empty-text">Здесь как то пустовато...</p></div>';
-    } else {
-        chatsList.innerHTML = '';
-        userChats.forEach(chat => {
-            const chatItem = createChatItem(chat);
-            chatsList.appendChild(chatItem);
-        });
+    try {
+        // Получаем все чаты текущего пользователя
+        const userChats = await getAllUserChats();
+        
+        if (userChats.length === 0) {
+            chatsList.innerHTML = '<div class="empty-state"><p class="empty-text">Здесь как то пустовато...</p></div>';
+        } else {
+            chatsList.innerHTML = '';
+            userChats.forEach(chat => {
+                const chatItem = createChatItem(chat);
+                chatsList.appendChild(chatItem);
+            });
+        }
+    } catch (error) {
+        console.error('Ошибка при обновлении списка чатов:', error);
+        chatsList.innerHTML = '<div class="empty-state"><p class="empty-text">Ошибка загрузки чатов</p></div>';
     }
 }
 
 // Получить все чаты пользователя
-function getAllUserChats() {
+async function getAllUserChats() {
     const chats = [];
     const chatIds = new Set();
     
-    // Проходим по всем ключам localStorage
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.startsWith('chat_')) {
-            const messages = JSON.parse(localStorage.getItem(key)) || [];
+    try {
+        // Загружаем чаты из Firebase
+        const chatsSnapshot = await getDocs(collection(db, "chats"));
+        
+        chatsSnapshot.forEach(doc => {
+            const chatData = doc.data();
             
-            if (messages.length > 0) {
-                // Находим сообщения с участием текущего пользователя
-                const userMessage = messages.find(m => 
-                    m.senderId === currentUser.id || m.receiverId === currentUser.id
-                );
+            // Проверяем, участвует ли текущий пользователь в этом чате
+            if (chatData.participants && chatData.participants.includes(currentUser.id)) {
+                const otherUserId = chatData.participants.find(id => id !== currentUser.id);
                 
-                if (userMessage) {
-                    const otherUserId = userMessage.senderId === currentUser.id ? 
-                        userMessage.receiverId : userMessage.senderId;
+                if (otherUserId && !chatIds.has(otherUserId)) {
+                    const otherUser = allUsers.find(u => u.id === otherUserId);
+                    if (otherUser) {
+                        chatIds.add(otherUserId);
+                        chats.push({
+                            user: otherUser,
+                            lastMessage: chatData.lastMessage || '',
+                            lastMessageTime: chatData.lastMessageTime || 0,
+                            lastMessageSender: chatData.lastMessageSender || '',
+                            unreadCount: 0 // Можно добавить подсчет непрочитанных
+                        });
+                    }
+                }
+            }
+        });
+        
+        // Сортируем чаты по времени последнего сообщения
+        chats.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+        
+    } catch (error) {
+        console.error('Ошибка при загрузке чатов из Firebase:', error);
+        
+        // Fallback к локальному хранилищу
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('chat_')) {
+                const messages = JSON.parse(localStorage.getItem(key)) || [];
+                
+                if (messages.length > 0) {
+                    // Находим сообщения с участием текущего пользователя
+                    const userMessage = messages.find(m => 
+                        m.senderId === currentUser.id || m.receiverId === currentUser.id
+                    );
                     
-                    if (!chatIds.has(otherUserId)) {
-                        const otherUser = allUsers.find(u => u.id === otherUserId);
-                        if (otherUser) {
-                            // Получаем список скрытых сообщений для текущего пользователя
-                            const hiddenMessagesKey = `hidden_${currentUser.id}_${key}`;
-                            const hiddenMessages = JSON.parse(localStorage.getItem(hiddenMessagesKey)) || [];
-                            
-                            // Фильтруем сообщения, убирая скрытые
-                            const visibleMessages = messages.filter(message => !hiddenMessages.includes(message.id));
-                            
-                            if (visibleMessages.length > 0) {
-                                const lastMessage = visibleMessages[visibleMessages.length - 1];
+                    if (userMessage) {
+                        const otherUserId = userMessage.senderId === currentUser.id ? 
+                            userMessage.receiverId : userMessage.senderId;
+                        
+                        if (!chatIds.has(otherUserId)) {
+                            const otherUser = allUsers.find(u => u.id === otherUserId);
+                            if (otherUser) {
+                                chatIds.add(otherUserId);
+                                
+                                // Получаем последнее сообщение
+                                const lastMessage = messages[messages.length - 1];
                                 chats.push({
                                     user: otherUser,
-                                    lastMessage: lastMessage,
-                                    unreadCount: visibleMessages.filter(m => 
-                                        m.receiverId === currentUser.id && !m.read
-                                    ).length
+                                    lastMessage: lastMessage.text || '',
+                                    lastMessageTime: lastMessage.timestamp || 0,
+                                    lastMessageSender: lastMessage.senderId || '',
+                                    unreadCount: 0
                                 });
-                                chatIds.add(otherUserId);
                             }
                         }
                     }
@@ -905,8 +988,10 @@ function getAllUserChats() {
         }
     }
     
-    // Сортируем по времени последнего сообщения
-    return chats.sort((a, b) => b.lastMessage.timestamp - a.lastMessage.timestamp);
+    // Сортируем чаты по времени последнего сообщения
+    chats.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+    
+    return chats;
 }
 
 // Создать элемент чата
@@ -922,14 +1007,7 @@ function createChatItem(chat) {
     const avatarClass = chat.user.online ? 'online' : 'offline';
     
     // Определяем текст последнего сообщения
-    let lastMessageText = '';
-    if (chat.lastMessage.type === 'image') {
-        lastMessageText = 'Изображение';
-    } else if (chat.lastMessage.type === 'file') {
-        lastMessageText = `Файл: ${chat.lastMessage.fileName}`;
-    } else {
-        lastMessageText = chat.lastMessage.text || '';
-    }
+    let lastMessageText = chat.lastMessage || '';
     
     div.innerHTML = `
         <img src="${avatar}" alt="${chat.user.username}" class="chat-item-avatar ${avatarClass}">
