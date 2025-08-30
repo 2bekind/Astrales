@@ -47,6 +47,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             isLoggedIn = true;
             showChatList();
         }
+        
+        // Настраиваем отслеживание видимости страницы
+        setupPageVisibilityTracking();
     } catch (error) {
         console.error('Ошибка при инициализации:', error);
     }
@@ -353,7 +356,8 @@ async function handleLogin(event) {
                 id: cred.user.uid,
                 username: username,
                 avatar: userDataObj.avatar || null,
-                online: true
+                online: true,
+                lastSeen: null
             };
             
             // Сохраняем в localStorage
@@ -459,7 +463,12 @@ function showLoginForm() {
 }
 
 // Выход из аккаунта
-function handleLogout() {
+async function handleLogout() {
+    // Устанавливаем статус оффлайн перед выходом
+    if (currentUser) {
+        await setUserOnlineStatus(false);
+    }
+    
     // Очищаем данные текущего пользователя
     currentUser = null;
     isLoggedIn = false;
@@ -1164,6 +1173,7 @@ function createChatItem(chat) {
     
     // Добавляем классы для статуса онлайн
     const avatarClass = chat.user.online ? 'online' : 'offline';
+    const statusText = chat.user.online ? 'В сети' : 'Не в сети';
     
     // Определяем текст последнего сообщения
     let lastMessageText = chat.lastMessage || '';
@@ -2031,3 +2041,75 @@ window.openImageUpload = openImageUpload;
 window.openElixiumModal = openElixiumModal;
 window.closeElixiumModal = closeElixiumModal;
 window.purchaseElixium = purchaseElixium;
+
+// Функции для отслеживания онлайн/оффлайн статуса
+function setupPageVisibilityTracking() {
+    // Отслеживаем видимость страницы
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Отслеживаем закрытие страницы/вкладки
+    window.addEventListener('beforeunload', handlePageUnload);
+    
+    // Отслеживаем фокус окна
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('blur', handleWindowBlur);
+    
+    // Устанавливаем статус онлайн при загрузке
+    if (isLoggedIn && currentUser) {
+        setUserOnlineStatus(true);
+    }
+}
+
+function handleVisibilityChange() {
+    if (isLoggedIn && currentUser) {
+        if (document.hidden) {
+            // Страница скрыта - устанавливаем оффлайн
+            setUserOnlineStatus(false);
+        } else {
+            // Страница видна - устанавливаем онлайн
+            setUserOnlineStatus(true);
+        }
+    }
+}
+
+function handlePageUnload() {
+    if (isLoggedIn && currentUser) {
+        // Устанавливаем оффлайн статус при закрытии
+        setUserOnlineStatus(false);
+    }
+}
+
+function handleWindowFocus() {
+    if (isLoggedIn && currentUser) {
+        // Окно получило фокус - устанавливаем онлайн
+        setUserOnlineStatus(true);
+    }
+}
+
+function handleWindowBlur() {
+    if (isLoggedIn && currentUser) {
+        // Окно потеряло фокус - устанавливаем оффлайн
+        setUserOnlineStatus(false);
+    }
+}
+
+async function setUserOnlineStatus(online) {
+    if (!currentUser) return;
+    
+    try {
+        const userRef = doc(db, "users", currentUser.id);
+        await setDoc(userRef, {
+            online: online,
+            lastSeen: online ? null : Date.now()
+        }, { merge: true });
+        
+        // Обновляем локальное состояние
+        currentUser.online = online;
+        currentUser.lastSeen = online ? null : Date.now();
+        localStorage.setItem('astralesUser', JSON.stringify(currentUser));
+        
+        console.log(`Пользователь ${currentUser.username} ${online ? 'онлайн' : 'оффлайн'}`);
+    } catch (error) {
+        console.error('Ошибка при обновлении статуса:', error);
+    }
+}

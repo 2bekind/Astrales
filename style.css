@@ -252,6 +252,8 @@ body {
     height: 100%;
     border-radius: 50%;
     object-fit: cover;
+    max-width: 200px;
+    max-height: 200px;
 }
 
 .edit-icon {
@@ -480,6 +482,8 @@ body {
     margin-right: 15px;
     object-fit: cover;
     position: relative;
+    max-width: 200px;
+    max-height: 200px;
 }
 
 .chat-item-avatar.online {
@@ -615,6 +619,8 @@ body {
     position: relative;
     cursor: pointer;
     transition: all 0.2s ease;
+    max-width: 200px;
+    max-height: 200px;
 }
 
 .chat-user-avatar:hover {
@@ -644,6 +650,14 @@ body {
 
 .online-status.offline {
     color: #888;
+}
+
+.chat-user-avatar.online {
+    border: 3px solid #4CAF50;
+}
+
+.chat-user-avatar.offline {
+    border: 3px solid #666;
 }
 
 .chat-actions {
@@ -1037,6 +1051,8 @@ body {
     border: 4px solid #0088cc;
     margin: 0 auto;
     display: block;
+    max-width: 200px;
+    max-height: 200px;
 }
 
 .user-profile-info {
@@ -1120,6 +1136,8 @@ body {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    max-width: 200px;
+    max-height: 200px;
 }
 
 .avatar-actions {
