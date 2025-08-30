@@ -8,8 +8,18 @@
 </head>
 <body>
     <div id="app">
+        <!-- Экран загрузки -->
+        <div id="loadingScreen" class="loading-screen">
+            <div class="loading-content">
+                <h1 class="loading-title">Astrales</h1>
+                <div class="loading-text">
+                    <span id="loadingDots">Загрузка</span>
+                </div>
+            </div>
+        </div>
+        
         <!-- Форма входа/регистрации -->
-        <div id="loginForm" class="login-container">
+        <div id="loginForm" class="login-container hidden">
             <div class="login-card">
                 <h1 class="login-title">Astrales</h1>
                 <p class="login-subtitle">Перед тем как начать, создайте аккаунт</p>
@@ -98,8 +108,10 @@
                         <img src="images/ELIXIUM.png" alt="ELIXIUM" class="elixium-icon">
                     </div>
                     <div class="profile-avatar" onclick="toggleProfileMenu()">
-                        <img id="userAvatar" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiM0NDQ0NDQiLz4KPHBhdGggZD0iTTIwIDEwQzIyLjA5IDEwIDI0IDExLjkxIDI0IDE0QzI0IDE2LjA5IDIyLjA5IDE4IDIwIDE4QzE3LjkxIDE4IDE2IDE2LjA5IDE2IDE0QzE2IDExLjkxIDE3LjkxIDEwIDIwIDEwWiIgZmlsbD0iI0ZGRkZGRiIvPgo8cGF0aCBkPSJNMjAgMjBDMTYuNjkgMjAgMTQgMjIuNjkgMTQgMjZIMjZDMjYgMjIuNjkgMjMuMzEgMjAgMjAgMjBaIiBmaWxsPSIjRkZGRkZGIi8+Cjwvc3ZnPgo=" alt="Avatar">
-                        <div class="edit-icon">✏️</div>
+                        <div class="avatar-container" style="position: relative;">
+                            <img id="userAvatar" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiM0NDQ0NDQiLz4KPHBhdGggZD0iTTIwIDEwQzIyLjA5IDEwIDI0IDExLjkxIDI0IDE0QzI0IDE2LjA5IDIyLjA5IDE4IDIwIDE4QzE3LjkxIDE4IDE2IDE2LjA5IDE2IDE0QzE2IDExLjkxIDE3LjkxIDEwIDIwIDEwWiIgZmlsbD0iI0ZGRkZGRiIvPgo8cGF0aCBkPSJNMjAgMjBDMTYuNjkgMjAgMTQgMjIuNjkgMTQgMjZIMjZDMjYgMjIuNjkgMjMuMzEgMjAgMjAgMjBaIiBmaWxsPSIjRkZGRkZGIi8+Cjwvc3ZnPgo=" alt="Avatar">
+                        </div>
+                        <!-- <div class="edit-icon">✏️</div> -->
                     </div>
                     <div id="profileMenu" class="profile-menu hidden">
                         <div class="profile-menu-item" onclick="openProfileSettings()">
@@ -147,7 +159,9 @@
         <div id="userChat" class="user-chat hidden">
             <div class="chat-header">
                 <div class="chat-user-info">
-                    <img id="chatUserAvatar" src="" alt="User Avatar" class="chat-user-avatar" onclick="openUserProfileModal()">
+                    <div class="avatar-container" style="position: relative;">
+                        <img id="chatUserAvatar" src="" alt="User Avatar" class="chat-user-avatar" onclick="openUserProfileModal()">
+                    </div>
                     <div class="chat-user-details">
                         <h3 id="chatUserName">Имя пользователя</h3>
                         <span class="online-status" id="chatUserStatus">В сети</span>
@@ -243,7 +257,9 @@
                 </div>
                 <div class="modal-body">
                     <div class="user-profile-avatar">
-                        <img id="userProfileAvatar" src="" alt="User Avatar">
+                        <div class="avatar-container" style="position: relative;">
+                            <img id="userProfileAvatar" src="" alt="User Avatar">
+                        </div>
                     </div>
                     <div class="user-profile-info">
                         <h4 id="userProfileUsername">Имя пользователя</h4>
@@ -337,14 +353,6 @@
                         </div>
                     </div>
                     <div class="call-controls">
-                        <button class="mute-button" onclick="toggleMute()" id="muteButton">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M12 1A3 3 0 0 0 9 4V10A3 3 0 0 0 15 10V4A3 3 0 0 0 12 1Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M19 10V9A7 7 0 0 0 5 9V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M12 19V23" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        </button>
                         <button class="end-call-button" onclick="endCall()">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -377,6 +385,8 @@
         </div>
     </div>
 
+
+
     <!-- Модальное окно подтверждения очистки чатов -->
     <div id="clearChatsModal" class="modal hidden">
         <div class="modal-content clear-chats-modal">
@@ -408,20 +418,14 @@
                 <button class="close-button" onclick="closeFramesModal()">×</button>
             </div>
             <div class="modal-body">
-                <div class="frames-grid">
-                    <div class="frame-item" onclick="selectFrame('none')">
-                        <div class="frame-preview no-frame">
-                            <div class="preview-avatar"></div>
-                        </div>
-                        <span class="frame-name">Без рамки</span>
-                    </div>
-                    <div class="frame-item" onclick="selectFrame('bunny-frame')">
-                        <div class="frame-preview bunny-frame">
-                            <div class="preview-avatar"></div>
-                        </div>
-                        <span class="frame-name">Bunny Frame</span>
-                    </div>
-                </div>
+                                 <div class="frames-grid">
+                     <div class="frame-item" onclick="selectFrame('none')">
+                         <div class="frame-preview no-frame">
+                             <div class="preview-avatar"></div>
+                         </div>
+                         <span class="frame-name">Без рамки</span>
+                     </div>
+                 </div>
             </div>
         </div>
     </div>
@@ -468,6 +472,11 @@
             </div>
         </div>
     </div>
+
+    <!-- Элемент для воспроизведения звука уведомлений -->
+    <audio id="messageSound" preload="auto" volume="0.3">
+        <source src="sounds/Meow.mp3" type="audio/mpeg">
+    </audio>
 
     <!-- Firebase Auth & Firestore Setup -->
     <script type="module" src="script.js"></script>

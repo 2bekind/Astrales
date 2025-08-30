@@ -24,16 +24,143 @@ let callTimer = null; // Таймер звонка
 let callStartTime = null; // Время начала звонка
 let currentMode = 'login'; // Текущий режим: 'login' или 'register'
 let selectedMessage = null; // Выбранное сообщение для контекстного меню
-let selectedChatUser = null; // Выбранный пользователь для контекстного меню чата
 let pinnedChats = []; // Закрепленные чаты
 let pinnedMessages = {}; // Закрепленные сообщения по чатам {chatId: messageId}
 let currentPinnedMessage = null; // Текущее закрепленное сообщение
 
+// Глобальная переменная для состояния звука
+let soundEnabled = true;
 
+// Функция воспроизведения звука уведомления
+function playMessageSound(senderId = null) {
+    if (!soundEnabled) return; // Не воспроизводим звук если он отключен
+    
+    try {
+        const audio = document.getElementById('messageSound');
+        if (audio) {
+            audio.volume = 0.3; // Устанавливаем громкость на 30%
+            audio.currentTime = 0; // Сбрасываем время воспроизведения
+            audio.play().catch(error => {
+                console.log('Не удалось воспроизвести звук:', error);
+            });
+        }
+    } catch (error) {
+        console.log('Ошибка при воспроизведении звука:', error);
+    }
+}
+
+// Функция переключения звука
+function toggleSound() {
+    soundEnabled = !soundEnabled;
+    const soundButton = document.getElementById('soundButton');
+    
+    if (soundEnabled) {
+        soundButton.textContent = '🔊';
+        soundButton.classList.remove('muted');
+        soundButton.title = 'Звук уведомлений (включен)';
+    } else {
+        soundButton.textContent = '🔇';
+        soundButton.classList.add('muted');
+        soundButton.title = 'Звук уведомлений (выключен)';
+    }
+    
+    // Сохраняем настройку в localStorage
+    localStorage.setItem('soundEnabled', soundEnabled);
+}
+
+// Функция загрузки настроек звука
+function loadSoundSettings() {
+    const savedSoundSetting = localStorage.getItem('soundEnabled');
+    if (savedSoundSetting !== null) {
+        soundEnabled = JSON.parse(savedSoundSetting);
+    }
+}
+
+
+
+
+
+
+
+// Анимация точек загрузки
+function animateLoadingDots() {
+    const loadingDots = document.getElementById('loadingDots');
+    let dots = '';
+    let dotCount = 0;
+    
+    const interval = setInterval(() => {
+        dots = 'Загрузка' + '.'.repeat(dotCount);
+        loadingDots.textContent = dots;
+        dotCount = (dotCount + 1) % 4;
+    }, 500);
+    
+    return interval;
+}
+
+// Скрыть экран загрузки
+function hideLoadingScreen() {
+    const loadingScreen = document.getElementById('loadingScreen');
+    loadingScreen.classList.add('hidden');
+}
+
+// Проверить премиум статус пользователя
+function isPremiumUser(username) {
+    return username === '2bekind';
+}
+
+// Добавить премиум индикатор к аватару
+function addPremiumIndicator(avatarElement, username = null) {
+    if (!avatarElement) return;
+    
+    // Проверяем, есть ли уже индикатор
+    const existingIndicator = avatarElement.parentElement.querySelector('.premium-indicator');
+    if (existingIndicator) return;
+    
+    // Получаем имя пользователя
+    let targetUsername = username;
+    if (!targetUsername) {
+        targetUsername = getUsernameFromAvatar(avatarElement);
+    }
+    
+    if (!isPremiumUser(targetUsername)) return;
+    
+    // Создаем индикатор
+    const indicator = document.createElement('div');
+    indicator.className = 'premium-indicator';
+    
+    // Убеждаемся, что родительский элемент имеет position: relative
+    const parentElement = avatarElement.parentElement;
+    parentElement.style.position = 'relative';
+    
+    // Добавляем индикатор к родительскому элементу аватара
+    parentElement.appendChild(indicator);
+}
+
+// Получить имя пользователя из аватара (вспомогательная функция)
+function getUsernameFromAvatar(avatarElement) {
+    // Пытаемся найти имя пользователя в ближайших элементах
+    const chatUserName = avatarElement.closest('.chat-user-info')?.querySelector('#chatUserName');
+    if (chatUserName) return chatUserName.textContent;
+    
+    const searchResultUsername = avatarElement.closest('.search-result-item')?.querySelector('.search-result-username');
+    if (searchResultUsername) return searchResultUsername.textContent;
+    
+    const chatItemUsername = avatarElement.closest('.chat-item')?.querySelector('.chat-item-username');
+    if (chatItemUsername) return chatItemUsername.textContent;
+    
+    const userProfileUsername = avatarElement.closest('.user-profile-modal')?.querySelector('#userProfileUsername');
+    if (userProfileUsername) return userProfileUsername.textContent;
+    
+    // Если не найдено, возвращаем null
+    return null;
+}
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async function() {
     try {
+        // Запускаем анимацию точек
+        const loadingInterval = animateLoadingDots();
+        
         // Загружаем всех пользователей из Firebase
         await loadAllUsersFromFirebase();
         
@@ -45,13 +172,25 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (savedUser) {
             currentUser = JSON.parse(savedUser);
             isLoggedIn = true;
+            hideLoadingScreen();
             showChatList();
+        } else {
+            hideLoadingScreen();
+            showLoginForm();
         }
         
         // Настраиваем отслеживание видимости страницы
         setupPageVisibilityTracking();
+        
+        // Загружаем настройки звука
+        loadSoundSettings();
+        
+        // Останавливаем анимацию точек
+        clearInterval(loadingInterval);
+        
     } catch (error) {
         console.error('Ошибка при инициализации:', error);
+        hideLoadingScreen();
     }
 });
 
@@ -134,6 +273,23 @@ function setupRealtimeUsersListener() {
         // Слушатель новых сообщений
         onSnapshot(collection(db, "messages"), (snapshot) => {
             console.log('Новые сообщения в реальном времени...');
+            
+            snapshot.docChanges().forEach((change) => {
+                const messageData = change.doc.data();
+                
+                // Если это новое сообщение и мы получатель
+                if (change.type === 'added' && messageData.receiverId === currentUser.id) {
+                    // Проверяем, не находимся ли мы в активном чате с отправителем
+                    const isInActiveChat = currentChat && 
+                        (messageData.senderId === currentChat.id || messageData.receiverId === currentChat.id) &&
+                        !document.getElementById('userChat').classList.contains('hidden');
+                    
+                    // Воспроизводим звук только если не в активном чате с отправителем
+                    if (!isInActiveChat) {
+                        playMessageSound(messageData.senderId);
+                    }
+                }
+            });
             
             // Если пользователь находится в чате, обновляем сообщения
             if (isLoggedIn && currentChat && document.getElementById('userChat').classList.contains('hidden') === false) {
@@ -279,7 +435,6 @@ function openUserProfileModal() {
     const userProfileAvatar = avatar.parentElement;
     
     // Удаляем все классы статуса
-    userProfileAvatar.classList.remove('bunny-frame');
     statusIndicator.classList.remove('online', 'offline');
     
     // Проверяем, есть ли у пользователя выбранная рамка
@@ -293,6 +448,11 @@ function openUserProfileModal() {
     } else {
         statusIndicator.className = 'status-indicator offline';
         statusText.textContent = 'Не в сети';
+    }
+    
+    // Добавляем премиум индикатор если нужно
+    if (isPremiumUser(currentChat.username)) {
+        addPremiumIndicator(avatar, currentChat.username);
     }
     
     // Показываем модальное окно
@@ -520,11 +680,14 @@ function openProfileSettings() {
     const currentAvatarContainer = modalAvatar.parentElement;
     if (currentUser.selectedFrame) {
         currentAvatarContainer.classList.add(currentUser.selectedFrame);
-    } else {
-        currentAvatarContainer.classList.remove('bunny-frame');
     }
     
     usernameInput.value = currentUser.username;
+    
+    // Добавляем премиум индикатор если нужно
+    if (isPremiumUser(currentUser.username)) {
+        addPremiumIndicator(modalAvatar, currentUser.username);
+    }
     
     // Показываем модальное окно
     modal.classList.remove('hidden');
@@ -637,9 +800,11 @@ function updateUserAvatar() {
     // Добавляем выбранную рамку если есть
     if (currentUser && currentUser.selectedFrame) {
         profileAvatar.classList.add(currentUser.selectedFrame);
-    } else {
-        // Удаляем только если у пользователя нет выбранной рамки
-        profileAvatar.classList.remove('bunny-frame');
+    }
+    
+    // Добавляем премиум индикатор если нужно
+    if (currentUser && isPremiumUser(currentUser.username)) {
+        addPremiumIndicator(userAvatar, currentUser.username);
     }
 }
 
@@ -704,7 +869,9 @@ function createSearchResultItem(user) {
     const avatar = getUserAvatar(user);
     
     div.innerHTML = `
-        <img src="${avatar}" alt="${user.username}" class="search-result-avatar">
+        <div class="avatar-container" style="position: relative;">
+            <img src="${avatar}" alt="${user.username}" class="search-result-avatar">
+        </div>
         <div class="search-result-info">
             <div class="search-result-username">${user.username}</div>
         </div>
@@ -717,6 +884,12 @@ function createSearchResultItem(user) {
             </button>
         </div>
     `;
+    
+    // Добавляем премиум индикатор если нужно
+    const avatarImg = div.querySelector('.search-result-avatar');
+    if (isPremiumUser(user.username)) {
+        addPremiumIndicator(avatarImg, user.username);
+    }
     
     return div;
 }
@@ -755,7 +928,7 @@ async function openUserChat(user) {
     const onlineStatus = document.querySelector('.online-status');
     
     // Удаляем все классы статуса
-    chatUserAvatar.classList.remove('online', 'offline', 'bunny-frame');
+    chatUserAvatar.classList.remove('online', 'offline');
     
     // Проверяем, есть ли у пользователя выбранная рамка
     if (user.selectedFrame) {
@@ -776,6 +949,14 @@ async function openUserChat(user) {
     
     // Загружаем сообщения чата
     await loadChatMessages(user.id);
+    
+    // Добавляем премиум индикатор если нужно
+    if (isPremiumUser(user.username)) {
+        addPremiumIndicator(chatUserAvatar, user.username);
+    }
+    
+    // Загружаем настройки звука для кнопки в чате
+    loadSoundSettings();
 }
 
 // Вернуться к списку чатов
@@ -1231,7 +1412,9 @@ function createChatItem(chat) {
     const isPinned = pinnedChats.includes(chat.user.id);
     
     div.innerHTML = `
-        <img src="${avatar}" alt="${chat.user.username}" class="chat-item-avatar ${avatarClass}">
+        <div class="avatar-container" style="position: relative;">
+            <img src="${avatar}" alt="${chat.user.username}" class="chat-item-avatar ${avatarClass}" data-user-id="${chat.user.id}">
+        </div>
         <div class="chat-item-info">
             <div class="chat-item-username">
                 ${chat.user.username}
@@ -1240,6 +1423,12 @@ function createChatItem(chat) {
             <div class="chat-item-last-message">${lastMessageText}</div>
         </div>
     `;
+    
+    // Добавляем премиум индикатор если нужно
+    const avatarImg = div.querySelector('.chat-item-avatar');
+    if (isPremiumUser(chat.user.username)) {
+        addPremiumIndicator(avatarImg, chat.user.username);
+    }
     
     // Добавляем обработчик правого клика для контекстного меню
     div.addEventListener('contextmenu', (event) => {
@@ -1277,6 +1466,11 @@ async function makeCall() {
         avatar.src = getUserAvatar(currentChat);
         username.textContent = currentChat.username;
         
+        // Добавляем премиум индикатор если нужно
+        if (isPremiumUser(currentChat.username)) {
+            addPremiumIndicator(avatar, currentChat.username);
+        }
+        
         // Показываем модальное окно
         modal.classList.remove('hidden');
         
@@ -1306,6 +1500,11 @@ function showIncomingCall(callData) {
         avatar.src = getUserAvatar(caller);
         name.textContent = caller.username;
         username.textContent = caller.username;
+        
+        // Добавляем премиум индикатор если нужно
+        if (isPremiumUser(caller.username)) {
+            addPremiumIndicator(avatar, caller.username);
+        }
     }
     
     // Сохраняем данные звонка
@@ -1358,6 +1557,11 @@ function showActiveCall(callData) {
     if (otherUser) {
         avatar.src = getUserAvatar(otherUser);
         name.textContent = otherUser.username;
+        
+        // Добавляем премиум индикатор если нужно
+        if (isPremiumUser(otherUser.username)) {
+            addPremiumIndicator(avatar, otherUser.username);
+        }
     }
     
     // Показываем модальное окно
@@ -1413,35 +1617,7 @@ async function endCall() {
     }
 }
 
-// Переключить микрофон
-function toggleMute() {
-    const muteButton = document.getElementById('muteButton');
-    const isMuted = muteButton.querySelector('svg').classList.contains('muted');
-    
-    if (isMuted) {
-        // Включаем микрофон
-        muteButton.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 1A3 3 0 0 0 9 4V10A3 3 0 0 0 15 10V4A3 3 0 0 0 12 1Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M19 10V9A7 7 0 0 0 5 9V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M12 19V23" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        `;
-    } else {
-        // Отключаем микрофон
-        muteButton.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="muted">
-                <path d="M12 1A3 3 0 0 0 9 4V10A3 3 0 0 0 15 10V4A3 3 0 0 0 12 1Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M19 10V9A7 7 0 0 0 5 9V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M12 19V23" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        `;
-    }
-    // В реальном приложении здесь была бы логика отключения микрофона
-}
+
 
 // Начать таймер звонка
 function startCallTimer() {
@@ -1836,6 +2012,9 @@ function showChatContextMenu(event, user) {
     const contextMenu = document.getElementById('chatContextMenu');
     const isPinned = pinnedChats.includes(user.id);
     
+    // Сохраняем ID пользователя в dataset
+    contextMenu.dataset.userId = user.id;
+    
     // Обновляем текст кнопки закрепления
     const pinButton = contextMenu.querySelector('.pin-chat-btn');
     pinButton.textContent = isPinned ? 'Открепить чат' : 'Закрепить чат';
@@ -1845,9 +2024,6 @@ function showChatContextMenu(event, user) {
     contextMenu.style.left = event.pageX - 10 + 'px';
     contextMenu.style.top = event.pageY - 10 + 'px';
     
-    // Сохраняем выбранного пользователя
-    selectedChatUser = user;
-    
     // Добавляем обработчик клика вне меню для его скрытия
     document.addEventListener('click', hideChatContextMenu);
 }
@@ -1856,6 +2032,7 @@ function showChatContextMenu(event, user) {
 function hideChatContextMenu() {
     const contextMenu = document.getElementById('chatContextMenu');
     contextMenu.style.display = 'none';
+    delete contextMenu.dataset.userId;
     document.removeEventListener('click', hideChatContextMenu);
 }
 
@@ -1988,13 +2165,16 @@ async function loadPinnedMessage(chatId) {
 
 // Закрепить/открепить чат
 function togglePinChat() {
-    if (!selectedChatUser) return;
+    // Получаем пользователя из контекстного меню
+    const contextMenu = document.getElementById('chatContextMenu');
+    if (!contextMenu || !contextMenu.dataset.userId) return;
     
-    const userIndex = pinnedChats.indexOf(selectedChatUser.id);
+    const userId = contextMenu.dataset.userId;
+    const userIndex = pinnedChats.indexOf(userId);
     
     if (userIndex === -1) {
         // Закрепляем чат
-        pinnedChats.push(selectedChatUser.id);
+        pinnedChats.push(userId);
     } else {
         // Открепляем чат
         pinnedChats.splice(userIndex, 1);
@@ -2073,7 +2253,7 @@ window.cancelOutgoingCall = cancelOutgoingCall;
 window.acceptCall = acceptCall;
 window.declineCall = declineCall;
 window.endCall = endCall;
-window.toggleMute = toggleMute;
+
 window.openImageUpload = openImageUpload;
 window.handleFileUpload = handleFileUpload;
 window.openImageModal = openImageModal;

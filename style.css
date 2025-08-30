@@ -17,6 +17,69 @@ body {
     overflow-x: hidden;
 }
 
+/* Экран загрузки */
+.loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #1E1E1E;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.loading-content {
+    text-align: center;
+    color: #e0e0e0;
+}
+
+.loading-title {
+    font-size: 48px;
+    font-weight: 400;
+    margin-bottom: 15px;
+    color: #ffffff;
+    letter-spacing: 2px;
+}
+
+.loading-text {
+    font-size: 24px;
+    font-weight: 600;
+    color: #b0b0b0;
+    letter-spacing: 1px;
+}
+
+.loading-screen.hidden {
+    display: none;
+}
+
+/* Контейнер аватарки для премиум индикатора */
+.avatar-container {
+    position: relative;
+    overflow: hidden;
+}
+
+/* Премиум индикатор */
+.premium-indicator {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    width: 24px;
+    height: 24px;
+    background: url('images/PremiumIcon.png') center center no-repeat;
+    background-size: contain;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #1E1E1E;
+    z-index: 9999;
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+    pointer-events: none;
+}
+
 #app {
     width: 100%;
     min-height: 100vh;
@@ -260,26 +323,7 @@ body {
     max-height: 200px;
 }
 
-.profile-avatar.bunny-frame {
-    position: relative;
-}
 
-.profile-avatar.bunny-frame img {
-    border: none !important;
-}
-
-.profile-avatar.bunny-frame::before {
-    content: '';
-    position: absolute;
-    top: -8px;
-    left: -8px;
-    right: -8px;
-    bottom: -8px;
-    background: url('images/BunnyFrame.png') no-repeat center center;
-    background-size: contain;
-    z-index: 1;
-    pointer-events: none;
-}
 
 .edit-icon {
     position: absolute;
@@ -433,23 +477,7 @@ body {
     position: relative;
 }
 
-.search-result-item.bunny-frame .search-result-avatar {
-    border: none !important;
-    position: relative;
-}
 
-.search-result-item.bunny-frame .search-result-avatar::before {
-    content: '';
-    position: absolute;
-    top: -8px;
-    left: -8px;
-    right: -8px;
-    bottom: -8px;
-    background: url('images/BunnyFrame.png') no-repeat center center;
-    background-size: contain;
-    z-index: 1;
-    pointer-events: none;
-}
 
 .search-result-info {
     flex: 1;
@@ -538,23 +566,7 @@ body {
     border: 3px solid #666;
 }
 
-.chat-item-avatar.bunny-frame {
-    border: none !important;
-    position: relative;
-}
 
-.chat-item-avatar.bunny-frame::before {
-    content: '';
-    position: absolute;
-    top: -8px;
-    left: -8px;
-    right: -8px;
-    bottom: -8px;
-    background: url('images/BunnyFrame.png') no-repeat center center;
-    background-size: contain;
-    z-index: 1;
-    pointer-events: none;
-}
 
 .chat-item-info {
     flex: 1;
@@ -698,23 +710,7 @@ body {
     border: 3px solid #666;
 }
 
-.chat-user-avatar.bunny-frame {
-    border: none !important;
-    position: relative;
-}
 
-.chat-user-avatar.bunny-frame::before {
-    content: '';
-    position: absolute;
-    top: -8px;
-    left: -8px;
-    right: -8px;
-    bottom: -8px;
-    background: url('images/BunnyFrame.png') no-repeat center center;
-    background-size: contain;
-    z-index: 1;
-    pointer-events: none;
-}
 
 .chat-user-details h3 {
     color: #e0e0e0;
@@ -761,6 +757,27 @@ body {
 .call-button:hover {
     background: #5a5a5a;
     transform: scale(1.1);
+}
+
+.sound-button {
+    background: #4a4a4a;
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.2s ease;
+}
+
+.sound-button:hover {
+    background: #5a5a5a;
+    transform: scale(1.1);
+}
+
+.sound-button.muted {
+    opacity: 0.5;
 }
 
 .back-button {
@@ -1140,26 +1157,7 @@ body {
     max-height: 200px;
 }
 
-.user-profile-avatar.bunny-frame {
-    position: relative;
-}
 
-.user-profile-avatar.bunny-frame img {
-    border: none !important;
-}
-
-.user-profile-avatar.bunny-frame::before {
-    content: '';
-    position: absolute;
-    top: -12px;
-    left: -12px;
-    right: -12px;
-    bottom: -12px;
-    background: url('images/BunnyFrame.png') no-repeat center center;
-    background-size: contain;
-    z-index: 1;
-    pointer-events: none;
-}
 
 .user-profile-info {
     margin: 20px 0;
@@ -1255,23 +1253,7 @@ body {
     max-height: 200px;
 }
 
-.current-avatar.bunny-frame {
-    border: none !important;
-    position: relative;
-}
 
-.current-avatar.bunny-frame::before {
-    content: '';
-    position: absolute;
-    top: -8px;
-    left: -8px;
-    right: -8px;
-    bottom: -8px;
-    background: url('images/BunnyFrame.png') no-repeat center center;
-    background-size: contain;
-    z-index: 1;
-    pointer-events: none;
-}
 
 .avatar-actions {
     display: flex;
@@ -1481,7 +1463,7 @@ body {
     justify-content: center;
 }
 
-.mute-button, .end-call-button {
+.end-call-button {
     padding: 15px 25px;
     border: none;
     border-radius: 20px;
@@ -1489,24 +1471,6 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
-}
-
-.mute-button {
-    background: #4a4a4a;
-    color: white;
-}
-
-.mute-button:hover {
-    background: #5a5a5a;
-    transform: translateY(-2px);
-}
-
-.mute-button svg.muted {
-    opacity: 0.5;
-}
-
-.mute-button:hover svg.muted {
-    opacity: 1;
 }
 
 .end-call-button {
@@ -1807,23 +1771,7 @@ body {
     border: 3px solid #666;
 }
 
-.frame-preview.bunny-frame {
-    border: none;
-    position: relative;
-}
 
-.frame-preview.bunny-frame::before {
-    content: '';
-    position: absolute;
-    top: -8px;
-    left: -8px;
-    right: -8px;
-    bottom: -8px;
-    background: url('images/BunnyFrame.png') no-repeat center center;
-    background-size: contain;
-    z-index: 1;
-    pointer-events: none;
-}
 
 .preview-avatar {
     width: 60px;
