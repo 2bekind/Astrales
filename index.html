@@ -261,6 +261,10 @@
                         <button class="save-button" onclick="saveProfileChanges()">Сохранить</button>
                     </div>
                     <div class="frames-section">
+                        <label>Режим стримера</label>
+                        <button class="frames-button" onclick="openStreamerModeModal()">Открыть</button>
+                    </div>
+                    <div class="frames-section">
                         <label>Рамки:</label>
                         <button class="frames-button" onclick="openFramesModal()">Выбрать рамку</button>
                     </div>
@@ -543,6 +547,23 @@
                     <button class="purchase-button" onclick="purchaseElixium()">
                         Приобрести
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно Режима стримера -->
+    <div id="streamerModeModal" class="modal hidden">
+        <div class="modal-content streamer-mode-modal">
+            <div class="modal-header">
+                <h3>Режим стримера</h3>
+                <button class="close-button" onclick="closeStreamerModeModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p class="streamer-mode-description">При включении юзернеймы скрываются матовыми блоками везде в интерфейсе, пока режим не будет отключён.</p>
+                <div class="streamer-mode-actions">
+                    <button class="enable-streamer-button" onclick="setStreamerMode(true)">Включить</button>
+                    <button class="disable-streamer-button" onclick="setStreamerMode(false)">Выключить</button>
                 </div>
             </div>
         </div>

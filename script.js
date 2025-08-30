@@ -2707,3 +2707,36 @@ function openChat(userId) {
     
     // ... rest of existing code ...
 }
+
+// Streamer Mode API
+window.openStreamerModeModal = function() {
+    const modal = document.getElementById('streamerModeModal');
+    if (modal) modal.classList.remove('hidden');
+};
+
+window.closeStreamerModeModal = function() {
+    const modal = document.getElementById('streamerModeModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.setStreamerMode = function(enabled) {
+    try {
+        if (enabled) {
+            document.body.classList.add('streamer-mode');
+            localStorage.setItem('astralesStreamerMode', 'true');
+        } else {
+            document.body.classList.remove('streamer-mode');
+            localStorage.removeItem('astralesStreamerMode');
+        }
+    } finally {
+        window.closeStreamerModeModal();
+    }
+};
+
+// Применяем режим стримера при загрузке
+document.addEventListener('DOMContentLoaded', () => {
+    const enabled = localStorage.getItem('astralesStreamerMode') === 'true';
+    if (enabled) {
+        document.body.classList.add('streamer-mode');
+    }
+});
