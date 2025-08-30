@@ -27,7 +27,6 @@ import {
     setCurrentUser,
     setCurrentChat
 } from './chatSettings.js';
-import { initializeMobileSupport } from './mobileSupport.js';
 
 // Глобальные переменные
 let currentUser = null;
@@ -260,21 +259,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // Инициализируем настройки чата
         initializeChatSettings();
-
-        // Включаем мобильную поддержку долгого нажатия (вынесено в отдельный модуль)
-        initializeMobileSupport((event, minimalMessage) => {
-            // Открываем родное контекстное меню, используя имеющуюся функцию
-            // Строим объект с данными, совместимый с showMessageContextMenu
-            const message = {
-                id: minimalMessage.id,
-                senderId: minimalMessage.senderId,
-                text: minimalMessage.text
-            };
-            // Покажем меню только для своих сообщений
-            if (message.senderId === currentUser?.id) {
-                showMessageContextMenu(event, message);
-            }
-        }, { pressDelayMs: 600 });
         
     } catch (error) {
         console.error('Ошибка при инициализации:', error);
@@ -1176,10 +1160,7 @@ function displayMessages(messages) {
 function createMessageElement(message) {
     const div = document.createElement('div');
     div.className = `message ${message.senderId === currentUser.id ? 'sent' : 'received'}`;
-    // Маркируем элемент для мобильного долгого нажатия
-    div.classList.add('message-item');
-    div.setAttribute('data-message-id', message.id);
-    div.dataset.senderId = message.senderId;
+    div.setAttribute('data-message-id', message.id); // Добавляем ID сообщения для поиска
     
     const time = new Date(message.timestamp).toLocaleTimeString('ru-RU', { 
         hour: '2-digit', 
@@ -1192,16 +1173,14 @@ function createMessageElement(message) {
         statusHtml = '<span class="message-status">✓✓</span>';
     }
     
-    // Создаем содержимое сообщения и текст для меню в зависимости от типа
+    // Создаем содержимое сообщения в зависимости от типа
     let messageContent = '';
-    let displayTextForMenu = '';
     if (message.type === 'image') {
         messageContent = `
             <div class="message-image">
                 <img src="${message.imageData}" alt="Изображение" onclick="openImageModal('${message.imageData}')">
             </div>
         `;
-        displayTextForMenu = '🖼️ Изображение';
     } else if (message.type === 'file') {
         // Определяем иконку для типа файла
         const fileIcon = getFileIcon(message.fileType);
@@ -1222,14 +1201,9 @@ function createMessageElement(message) {
                 </a>
             </div>
         `;
-        displayTextForMenu = `📎 ${message.fileName || ''}`;
     } else {
         messageContent = message.text;
-        displayTextForMenu = message.text || '';
     }
-
-    // Сохраняем краткий текст в dataset для корректной работы контекстного меню на мобильных
-    div.dataset.text = displayTextForMenu;
     
     div.innerHTML = `
         <div class="message-content">
@@ -1241,9 +1215,12 @@ function createMessageElement(message) {
         </div>
     `;
     
-    // Добавляем обработчик правого клика для своих сообщений (десктоп)
+    // Добавляем обработчик правого клика для своих сообщений
     if (message.senderId === currentUser.id) {
         div.addEventListener('contextmenu', (event) => showMessageContextMenu(event, message));
+        
+        // Добавляем класс для мобильных устройств
+        div.classList.add('message-item');
     }
     
     return div;
