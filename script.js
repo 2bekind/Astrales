@@ -27,6 +27,7 @@ import {
     setCurrentUser,
     setCurrentChat
 } from './chatSettings.js';
+import { initializeMobileSupport } from './mobileSupport.js';
 
 // Глобальные переменные
 let currentUser = null;
@@ -259,6 +260,21 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // Инициализируем настройки чата
         initializeChatSettings();
+
+        // Включаем мобильную поддержку долгого нажатия (вынесено в отдельный модуль)
+        initializeMobileSupport((event, minimalMessage) => {
+            // Открываем родное контекстное меню, используя имеющуюся функцию
+            // Строим объект с данными, совместимый с showMessageContextMenu
+            const message = {
+                id: minimalMessage.id,
+                senderId: minimalMessage.senderId,
+                text: minimalMessage.text
+            };
+            // Покажем меню только для своих сообщений
+            if (message.senderId === currentUser?.id) {
+                showMessageContextMenu(event, message);
+            }
+        }, { pressDelayMs: 600 });
         
     } catch (error) {
         console.error('Ошибка при инициализации:', error);
