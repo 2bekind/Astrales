@@ -26,9 +26,9 @@ let selectedMessage = null; // Выбранное сообщение для ко
 
 
 // Инициализация приложения
-document.addEventListener('DOMContentLoaded', function() {
-    // Инициализируем тестовых пользователей ПЕРЕД проверкой сохраненного пользователя
-    initializeTestUsers();
+document.addEventListener('DOMContentLoaded', async function() {
+    // Загружаем всех пользователей из Firebase
+    await loadAllUsersFromFirebase();
     
     // Проверяем, есть ли сохраненный пользователь
     const savedUser = localStorage.getItem('astralesUser');
@@ -39,37 +39,34 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Инициализация тестовых пользователей
-function initializeTestUsers() {
-    const savedUsers = localStorage.getItem('astralesAllUsers');
-    if (savedUsers) {
-        allUsers = JSON.parse(savedUsers);
-    } else {
-        // Создаем тестовых пользователей с уникальными аватарами
-        allUsers = [
-            {
-                id: '1',
-                username: 'alex',
-                password: 'password123',
-                avatar: null,
-                online: true
-            },
-            {
-                id: '2',
-                username: 'maria',
-                password: 'password123',
-                avatar: null,
-                online: true
-            },
-            {
-                id: '3',
-                username: 'john',
-                password: 'password123',
-                avatar: null,
-                online: false
-            }
-        ];
+// Загрузка всех пользователей из Firebase
+async function loadAllUsersFromFirebase() {
+    try {
+        const usersSnapshot = await getDocs(collection(db, "users"));
+        allUsers = [];
+        
+        usersSnapshot.forEach(doc => {
+            const userData = doc.data();
+            allUsers.push({
+                id: doc.id,
+                username: userData.username,
+                avatar: userData.avatar || null,
+                online: userData.online || false,
+                lastSeen: userData.lastSeen || null
+            });
+        });
+        
+        // Сохраняем в localStorage для кэширования
         localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
+    } catch (error) {
+        console.error('Ошибка при загрузке пользователей:', error);
+        // Если не удалось загрузить из Firebase, используем localStorage
+        const savedUsers = localStorage.getItem('astralesAllUsers');
+        if (savedUsers) {
+            allUsers = JSON.parse(savedUsers);
+        } else {
+            allUsers = [];
+        }
     }
 }
 
@@ -88,7 +85,7 @@ function getDefaultAvatar() {
 }
 
 // Сохранить пользователя в общий список
-function saveUserToAllUsers(user) {
+async function saveUserToAllUsers(user) {
     const userIndex = allUsers.findIndex(u => u.id === user.id);
     if (userIndex !== -1) {
         // Обновляем существующего пользователя
@@ -97,8 +94,23 @@ function saveUserToAllUsers(user) {
         // Добавляем нового пользователя
         allUsers.push({ ...user });
     }
+    
     // Сохраняем в localStorage
     localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
+    
+    // Также обновляем в Firebase (если это не новый пользователь)
+    if (user.id) {
+        try {
+            await setDoc(doc(db, "users", user.id), {
+                username: user.username,
+                avatar: user.avatar,
+                online: user.online,
+                lastSeen: Date.now()
+            }, { merge: true });
+        } catch (error) {
+            console.error('Ошибка при сохранении пользователя в Firebase:', error);
+        }
+    }
 }
 
 // Открыть модальное окно профиля пользователя
@@ -212,6 +224,15 @@ async function handleLogin(event) {
                 lastSeen: Date.now()
             }, { merge: true });
             
+            // Обновляем пользователя в локальном списке
+            const userIndex = allUsers.findIndex(u => u.id === cred.user.uid);
+            if (userIndex !== -1) {
+                allUsers[userIndex] = { ...currentUser };
+            } else {
+                allUsers.push({ ...currentUser });
+            }
+            localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
+            
             showChatList();
         } else {
             showErrorMessage('Пользователь не найден');
@@ -242,12 +263,24 @@ async function handleRegister(event) {
     try {
         const cred = await createUserWithEmailAndPassword(auth, username + "@astrales.com", password);
         
+        // Создаем объект пользователя
+        const newUser = {
+            id: cred.user.uid,
+            username: username,
+            avatar: null,
+            online: true
+        };
+        
         // Сохраняем в Firestore
         await setDoc(doc(db, "users", cred.user.uid), {
             username: username,
             online: true,
             created: Date.now()
         });
+        
+        // Добавляем в локальный список пользователей
+        allUsers.push(newUser);
+        localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
 
         alert("Регистрация успешна! Теперь войдите.");
         switchMode('login');
