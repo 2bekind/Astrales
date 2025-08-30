@@ -69,7 +69,8 @@ async function loadAllUsersFromFirebase() {
                 username: userData.username,
                 avatar: userData.avatar || null,
                 online: userData.online || false,
-                lastSeen: userData.lastSeen || null
+                lastSeen: userData.lastSeen || null,
+                selectedFrame: userData.selectedFrame || null
             });
         });
         
@@ -104,7 +105,8 @@ function setupRealtimeUsersListener() {
                     username: userData.username,
                     avatar: userData.avatar || null,
                     online: userData.online || false,
-                    lastSeen: userData.lastSeen || null
+                    lastSeen: userData.lastSeen || null,
+                    selectedFrame: userData.selectedFrame || null
                 });
             });
             
@@ -273,7 +275,18 @@ function openUserProfileModal() {
     avatar.src = getUserAvatar(currentChat);
     username.textContent = currentChat.username;
     
-    // Устанавливаем статус
+    // Устанавливаем статус и рамку
+    const userProfileAvatar = avatar.parentElement;
+    
+    // Удаляем все классы статуса
+    userProfileAvatar.classList.remove('bunny-frame');
+    statusIndicator.classList.remove('online', 'offline');
+    
+    // Проверяем, есть ли у пользователя выбранная рамка
+    if (currentChat.selectedFrame) {
+        userProfileAvatar.classList.add(currentChat.selectedFrame);
+    }
+    
     if (currentChat.online) {
         statusIndicator.className = 'status-indicator online';
         statusText.textContent = 'В сети';
@@ -357,7 +370,8 @@ async function handleLogin(event) {
                 username: username,
                 avatar: userDataObj.avatar || null,
                 online: true,
-                lastSeen: null
+                lastSeen: null,
+                selectedFrame: userDataObj.selectedFrame || null
             };
             
             // Сохраняем в localStorage
@@ -502,6 +516,14 @@ function openProfileSettings() {
         modalAvatar.src = getDefaultAvatar();
     }
     
+    // Добавляем выбранную рамку если есть
+    const currentAvatarContainer = modalAvatar.parentElement;
+    if (currentUser.selectedFrame) {
+        currentAvatarContainer.classList.add(currentUser.selectedFrame);
+    } else {
+        currentAvatarContainer.classList.remove('bunny-frame');
+    }
+    
     usernameInput.value = currentUser.username;
     
     // Показываем модальное окно
@@ -604,10 +626,20 @@ function isUsernameTaken(username) {
 // Обновление аватара пользователя в интерфейсе
 function updateUserAvatar() {
     const userAvatar = document.getElementById('userAvatar');
+    const profileAvatar = userAvatar.parentElement;
+    
     if (currentUser && currentUser.avatar) {
         userAvatar.src = currentUser.avatar;
     } else {
         userAvatar.src = getDefaultAvatar();
+    }
+    
+    // Добавляем выбранную рамку если есть
+    if (currentUser && currentUser.selectedFrame) {
+        profileAvatar.classList.add(currentUser.selectedFrame);
+    } else {
+        // Удаляем только если у пользователя нет выбранной рамки
+        profileAvatar.classList.remove('bunny-frame');
     }
 }
 
@@ -663,6 +695,11 @@ function createSearchResultItem(user) {
     const div = document.createElement('div');
     div.className = 'search-result-item';
     
+    // Добавляем класс рамки если есть
+    if (user.selectedFrame) {
+        div.classList.add(user.selectedFrame);
+    }
+    
     // Используем аватар пользователя или дефолтный
     const avatar = getUserAvatar(user);
     
@@ -714,17 +751,21 @@ async function openUserChat(user) {
     const chatUserAvatar = document.getElementById('chatUserAvatar');
     chatUserAvatar.src = getUserAvatar(user);
     
-    // Добавляем классы для статуса онлайн
+    // Добавляем классы для статуса онлайн или admin
     const onlineStatus = document.querySelector('.online-status');
     
-    if (user.online) {
+    // Удаляем все классы статуса
+    chatUserAvatar.classList.remove('online', 'offline', 'bunny-frame');
+    
+    // Проверяем, есть ли у пользователя выбранная рамка
+    if (user.selectedFrame) {
+        chatUserAvatar.classList.add(user.selectedFrame);
+    } else if (user.online) {
         chatUserAvatar.classList.add('online');
-        chatUserAvatar.classList.remove('offline');
         onlineStatus.textContent = 'В сети';
         onlineStatus.classList.remove('offline');
     } else {
         chatUserAvatar.classList.add('offline');
-        chatUserAvatar.classList.remove('online');
         onlineStatus.textContent = 'Не в сети';
         onlineStatus.classList.add('offline');
     }
@@ -1172,8 +1213,17 @@ function createChatItem(chat) {
     const avatar = getUserAvatar(chat.user);
     
     // Добавляем классы для статуса онлайн
-    const avatarClass = chat.user.online ? 'online' : 'offline';
-    const statusText = chat.user.online ? 'В сети' : 'Не в сети';
+    let avatarClass = '';
+    let statusText = '';
+    
+    // Проверяем, есть ли у пользователя выбранная рамка
+    if (chat.user.selectedFrame) {
+        avatarClass = chat.user.selectedFrame;
+    } else {
+        avatarClass = chat.user.online ? 'online' : 'offline';
+    }
+    
+    statusText = chat.user.online ? 'В сети' : 'Не в сети';
     
     // Определяем текст последнего сообщения
     let lastMessageText = chat.lastMessage || '';
@@ -2041,6 +2091,69 @@ window.openImageUpload = openImageUpload;
 window.openElixiumModal = openElixiumModal;
 window.closeElixiumModal = closeElixiumModal;
 window.purchaseElixium = purchaseElixium;
+window.openFramesModal = openFramesModal;
+window.closeFramesModal = closeFramesModal;
+window.selectFrame = selectFrame;
+
+// Функции для работы с рамками
+function openFramesModal() {
+    const modal = document.getElementById('framesModal');
+    modal.classList.remove('hidden');
+    
+    // Показываем текущую выбранную рамку
+    updateFramesModalSelection();
+}
+
+function closeFramesModal() {
+    const modal = document.getElementById('framesModal');
+    modal.classList.add('hidden');
+}
+
+function updateFramesModalSelection() {
+    const frameItems = document.querySelectorAll('.frame-item');
+    frameItems.forEach(item => {
+        item.classList.remove('selected');
+    });
+    
+    if (currentUser && currentUser.selectedFrame) {
+        const selectedItem = document.querySelector(`[onclick="selectFrame('${currentUser.selectedFrame}')"]`);
+        if (selectedItem) {
+            selectedItem.classList.add('selected');
+        }
+    } else {
+        const noFrameItem = document.querySelector('[onclick="selectFrame(\'none\')"]');
+        if (noFrameItem) {
+            noFrameItem.classList.add('selected');
+        }
+    }
+}
+
+async function selectFrame(frameType) {
+    if (!currentUser) return;
+    
+    try {
+        // Обновляем рамку в Firebase
+        const userRef = doc(db, "users", currentUser.id);
+        await setDoc(userRef, {
+            selectedFrame: frameType === 'none' ? null : frameType
+        }, { merge: true });
+        
+        // Обновляем локальное состояние
+        currentUser.selectedFrame = frameType === 'none' ? null : frameType;
+        localStorage.setItem('astralesUser', JSON.stringify(currentUser));
+        
+        // Обновляем интерфейс
+        updateUserAvatar();
+        updateChatsList();
+        
+        // Обновляем выделение в модальном окне
+        updateFramesModalSelection();
+        
+        console.log(`Рамка изменена на: ${frameType}`);
+    } catch (error) {
+        console.error('Ошибка при изменении рамки:', error);
+    }
+}
 
 // Функции для отслеживания онлайн/оффлайн статуса
 function setupPageVisibilityTracking() {

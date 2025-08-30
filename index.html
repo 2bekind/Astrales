@@ -226,6 +226,10 @@
                         <input type="text" id="newUsername" class="username-input" placeholder="Введите новое имя">
                         <button class="save-button" onclick="saveProfileChanges()">Сохранить</button>
                     </div>
+                    <div class="frames-section">
+                        <label>Рамки:</label>
+                        <button class="frames-button" onclick="openFramesModal()">Выбрать рамку</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -391,6 +395,32 @@
                     <button class="cancel-clear-button" onclick="closeClearChatsModal()">
                         Передумал
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно выбора рамок -->
+    <div id="framesModal" class="modal hidden">
+        <div class="modal-content frames-modal">
+            <div class="modal-header">
+                <h3>Выбор рамки</h3>
+                <button class="close-button" onclick="closeFramesModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="frames-grid">
+                    <div class="frame-item" onclick="selectFrame('none')">
+                        <div class="frame-preview no-frame">
+                            <div class="preview-avatar"></div>
+                        </div>
+                        <span class="frame-name">Без рамки</span>
+                    </div>
+                    <div class="frame-item" onclick="selectFrame('bunny-frame')">
+                        <div class="frame-preview bunny-frame">
+                            <div class="preview-avatar"></div>
+                        </div>
+                        <span class="frame-name">Bunny Frame</span>
+                    </div>
                 </div>
             </div>
         </div>
