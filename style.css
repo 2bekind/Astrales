@@ -290,10 +290,13 @@ body {
 
 .search-container {
     width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .search-input {
-    width: 100%;
+    flex: 1;
     padding: 12px 20px;
     background: #3a3a3a;
     border: 1px solid #4a4a4a;
@@ -302,6 +305,32 @@ body {
     color: #e0e0e0;
     transition: all 0.2s ease;
     outline: none;
+}
+
+.refresh-button {
+    background: #3a3a3a;
+    border: 1px solid #4a4a4a;
+    border-radius: 50%;
+    width: 45px;
+    height: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #e0e0e0;
+    flex-shrink: 0;
+}
+
+.refresh-button:hover {
+    background: #404040;
+    border-color: #0088cc;
+    transform: rotate(180deg);
+}
+
+.refresh-button svg {
+    width: 20px;
+    height: 20px;
 }
 
 .search-input::placeholder {
