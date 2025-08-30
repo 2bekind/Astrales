@@ -94,6 +94,9 @@
             <div class="chat-header">
                 <h2 onclick="showClearChatsModal()">Чаты</h2>
                 <div class="profile-section">
+                    <div class="elixium-button" onclick="openElixiumModal()">
+                        <img src="images/ELIXIUM.png" alt="ELIXIUM" class="elixium-icon">
+                    </div>
                     <div class="profile-avatar" onclick="toggleProfileMenu()">
                         <img id="userAvatar" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiM0NDQ0NDQiLz4KPHBhdGggZD0iTTIwIDEwQzIyLjA5IDEwIDI0IDExLjkxIDI0IDE0QzI0IDE2LjA5IDIyLjA5IDE4IDIwIDE4QzE3LjkxIDE4IDE2IDE2LjA5IDE2IDE0QzE2IDExLjkxIDE3LjkxIDEwIDIwIDEwWiIgZmlsbD0iI0ZGRkZGRiIvPgo8cGF0aCBkPSJNMjAgMjBDMTYuNjkgMjAgMTQgMjIuNjkgMTQgMjZIMjZDMjYgMjIuNjkgMjMuMzEgMjAgMjAgMjBaIiBmaWxsPSIjRkZGRkZGIi8+Cjwvc3ZnPgo=" alt="Avatar">
                         <div class="edit-icon">✏️</div>
@@ -157,6 +160,18 @@
                         </svg>
                     </button>
                     <button class="back-button" onclick="backToChats()">← Назад</button>
+                </div>
+            </div>
+
+            <!-- Закрепленное сообщение -->
+            <div id="pinnedMessageContainer" class="pinned-message-container hidden">
+                <div class="pinned-message" onclick="scrollToPinnedMessage()">
+                    <div class="pinned-icon">📌</div>
+                    <div class="pinned-content">
+                        <div class="pinned-sender" id="pinnedSender"></div>
+                        <div class="pinned-text" id="pinnedText"></div>
+                    </div>
+                    <button class="unpin-button" onclick="unpinMessage(event)">×</button>
                 </div>
             </div>
 
@@ -340,11 +355,21 @@
 
     <!-- Контекстное меню для сообщений -->
     <div id="messageContextMenu" class="message-context-menu hidden">
+        <div class="context-menu-item" onclick="pinMessage()">
+            <span>Закрепить</span>
+        </div>
         <div class="context-menu-item" onclick="deleteMessageForMe()">
             <span>Удалить у меня</span>
         </div>
         <div class="context-menu-item" onclick="deleteMessageForEveryone()">
             <span>Удалить у всех</span>
+        </div>
+    </div>
+
+    <!-- Контекстное меню для чатов -->
+    <div id="chatContextMenu" class="context-menu" style="display: none;">
+        <div class="context-menu-item pin-chat-btn" onclick="togglePinChat()">
+            <span>Закрепить чат</span>
         </div>
     </div>
 
@@ -371,8 +396,50 @@
         </div>
     </div>
 
+    <!-- Модальное окно ELIXIUM -->
+    <div id="elixiumModal" class="modal hidden">
+        <div class="modal-content elixium-modal">
+            <div class="modal-header">
+                <h3>Astrales ELIXIUM</h3>
+                <button class="close-button" onclick="closeElixiumModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="elixium-features">
+                    <div class="feature-item">
+                        <span class="feature-icon">✨</span>
+                        <span class="feature-text">Уникальная рамка</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🎨</span>
+                        <span class="feature-text">Уникальный фон</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">😊</span>
+                        <span class="feature-text">Уникальные эмодзи</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">📱</span>
+                        <span class="feature-text">Изменение статуса эмодзи в профиле</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🚫</span>
+                        <span class="feature-text">Нет рекламы</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">📖</span>
+                        <span class="feature-text">Возможность выкладывать истории</span>
+                    </div>
+                </div>
+                <div class="elixium-actions">
+                    <button class="purchase-button" onclick="purchaseElixium()">
+                        Приобрести
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase Auth & Firestore Setup -->
     <script type="module" src="script.js"></script>
 </body>
 </html>
-

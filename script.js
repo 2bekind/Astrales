@@ -9,7 +9,9 @@ import {
     getDocs,
     doc,
     setDoc,
-    onSnapshot
+    onSnapshot,
+    query,
+    where
 } from './firebase.js';
 
 // Глобальные переменные
@@ -22,6 +24,10 @@ let callTimer = null; // Таймер звонка
 let callStartTime = null; // Время начала звонка
 let currentMode = 'login'; // Текущий режим: 'login' или 'register'
 let selectedMessage = null; // Выбранное сообщение для контекстного меню
+let selectedChatUser = null; // Выбранный пользователь для контекстного меню чата
+let pinnedChats = []; // Закрепленные чаты
+let pinnedMessages = {}; // Закрепленные сообщения по чатам {chatId: messageId}
+let currentPinnedMessage = null; // Текущее закрепленное сообщение
 
 
 
@@ -118,6 +124,69 @@ function setupRealtimeUsersListener() {
             if (isLoggedIn && document.getElementById('chatList').classList.contains('hidden') === false) {
                 updateChatsList();
             }
+        });
+        
+        // Слушатель новых сообщений
+        onSnapshot(collection(db, "messages"), (snapshot) => {
+            console.log('Новые сообщения в реальном времени...');
+            
+            // Если пользователь находится в чате, обновляем сообщения
+            if (isLoggedIn && currentChat && document.getElementById('userChat').classList.contains('hidden') === false) {
+                loadChatMessages(currentChat.id);
+            }
+            
+            // Обновляем список чатов, если пользователь находится в списке чатов
+            if (isLoggedIn && document.getElementById('chatList').classList.contains('hidden') === false) {
+                updateChatsList();
+            }
+        });
+        
+        // Слушатель звонков
+        onSnapshot(collection(db, "calls"), (snapshot) => {
+            console.log('Новые звонки в реальном времени...');
+            
+            snapshot.docChanges().forEach((change) => {
+                const callData = change.doc.data();
+                
+                // Если это новый звонок и мы получатель
+                if (change.type === 'added' && callData.receiverId === currentUser.id && callData.status === 'outgoing') {
+                    showIncomingCall(callData);
+                }
+                
+                // Если звонок принят
+                if (change.type === 'modified' && callData.status === 'active') {
+                    if (callData.callerId === currentUser.id || callData.receiverId === currentUser.id) {
+                        showActiveCall(callData);
+                    }
+                }
+                
+                // Если звонок завершен
+                if (change.type === 'modified' && callData.status === 'ended') {
+                    if (callData.callerId === currentUser.id || callData.receiverId === currentUser.id) {
+                        endCall();
+                    }
+                }
+            });
+        });
+        
+        // Слушатель закрепленных сообщений
+        onSnapshot(collection(db, "pinnedMessages"), (snapshot) => {
+            console.log('Изменения в закрепленных сообщениях...');
+            
+            snapshot.docChanges().forEach((change) => {
+                const pinnedData = change.doc.data();
+                
+                // Если это касается текущего чата
+                if (currentChat && pinnedData.chatId === getChatId(currentUser.id, currentChat.id)) {
+                    if (pinnedData.messageId) {
+                        currentPinnedMessage = pinnedData;
+                        updatePinnedMessageDisplay();
+                    } else {
+                        currentPinnedMessage = null;
+                        hidePinnedMessageDisplay();
+                    }
+                }
+            });
         });
         
     } catch (error) {
@@ -615,17 +684,17 @@ function viewUserProfile(userId) {
 }
 
 // Открыть чат с пользователем
-function openChatWithUser(userId) {
+async function openChatWithUser(userId) {
     const user = allUsers.find(u => u.id === userId);
     if (user) {
         currentChat = user;
-        openUserChat(user);
+        await openUserChat(user);
         hideSearchResults();
     }
 }
 
 // Открыть чат пользователя
-function openUserChat(user) {
+async function openUserChat(user) {
     document.getElementById('chatList').classList.add('hidden');
     document.getElementById('userChat').classList.remove('hidden');
     
@@ -651,8 +720,12 @@ function openUserChat(user) {
         onlineStatus.classList.add('offline');
     }
     
+    // Загружаем закрепленное сообщение
+    const chatId = getChatId(currentUser.id, user.id);
+    await loadPinnedMessage(chatId);
+    
     // Загружаем сообщения чата
-    loadChatMessages(user.id);
+    await loadChatMessages(user.id);
 }
 
 // Вернуться к списку чатов
@@ -663,24 +736,71 @@ function backToChats() {
 }
 
 // Загрузить сообщения чата
-function loadChatMessages(userId) {
+async function loadChatMessages(userId) {
     const chatMessages = document.getElementById('chatMessages');
     const chatId = getChatId(currentUser.id, userId);
     
-    // Получаем сообщения из localStorage
-    const messages = JSON.parse(localStorage.getItem(`chat_${chatId}`)) || [];
-    
-    // Получаем список скрытых сообщений для текущего пользователя
-    const hiddenMessagesKey = `hidden_${currentUser.id}_${chatId}`;
-    const hiddenMessages = JSON.parse(localStorage.getItem(hiddenMessagesKey)) || [];
-    
-    // Фильтруем сообщения, убирая скрытые
-    const visibleMessages = messages.filter(message => !hiddenMessages.includes(message.id));
-    
-    if (visibleMessages.length === 0) {
-        chatMessages.innerHTML = '<div class="empty-chat"><p>Пока что тут пустоватенько, может надо написать?</p></div>';
-    } else {
-        displayMessages(visibleMessages);
+    try {
+        // Загружаем сообщения из Firebase
+        const messagesSnapshot = await getDocs(collection(db, "messages"));
+        const firebaseMessages = [];
+        
+        messagesSnapshot.forEach(doc => {
+            const messageData = doc.data();
+            if (messageData.chatId === chatId) {
+                firebaseMessages.push({
+                    id: messageData.messageId,
+                    text: messageData.text,
+                    senderId: messageData.senderId,
+                    receiverId: messageData.receiverId,
+                    timestamp: messageData.timestamp,
+                    type: messageData.type || 'text',
+                    imageData: messageData.imageData,
+                    fileData: messageData.fileData,
+                    fileName: messageData.fileName,
+                    fileType: messageData.fileType,
+                    fileSize: messageData.fileSize
+                });
+            }
+        });
+        
+        // Сортируем сообщения по времени
+        firebaseMessages.sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Сохраняем в localStorage для кэширования
+        localStorage.setItem(`chat_${chatId}`, JSON.stringify(firebaseMessages));
+        
+        // Получаем список скрытых сообщений для текущего пользователя
+        const hiddenMessagesKey = `hidden_${currentUser.id}_${chatId}`;
+        const hiddenMessages = JSON.parse(localStorage.getItem(hiddenMessagesKey)) || [];
+        
+        // Фильтруем сообщения, убирая скрытые
+        const visibleMessages = firebaseMessages.filter(message => !hiddenMessages.includes(message.id));
+        
+        if (visibleMessages.length === 0) {
+            chatMessages.innerHTML = '<div class="empty-chat"><p>Пока что тут пустоватенько, может надо написать?</p></div>';
+        } else {
+            displayMessages(visibleMessages);
+        }
+        
+    } catch (error) {
+        console.error('Ошибка при загрузке сообщений из Firebase:', error);
+        
+        // Fallback к localStorage
+        const messages = JSON.parse(localStorage.getItem(`chat_${chatId}`)) || [];
+        
+        // Получаем список скрытых сообщений для текущего пользователя
+        const hiddenMessagesKey = `hidden_${currentUser.id}_${chatId}`;
+        const hiddenMessages = JSON.parse(localStorage.getItem(hiddenMessagesKey)) || [];
+        
+        // Фильтруем сообщения, убирая скрытые
+        const visibleMessages = messages.filter(message => !hiddenMessages.includes(message.id));
+        
+        if (visibleMessages.length === 0) {
+            chatMessages.innerHTML = '<div class="empty-chat"><p>Пока что тут пустоватенько, может надо написать?</p></div>';
+        } else {
+            displayMessages(visibleMessages);
+        }
     }
 }
 
@@ -767,11 +887,16 @@ function createMessageElement(message) {
 
 
 
+// Получить пользователя по ID
+function getUserById(userId) {
+    return allUsers.find(user => user.id === userId);
+}
+
 // Получить иконку для типа файла
 function getFileIcon(fileType) {
     switch (fileType) {
         case 'image':
-            return '🖼️';
+            return '📷';
         case 'document':
             return '📄';
         case 'archive':
@@ -810,12 +935,6 @@ async function sendMessage() {
             // Сохраняем сообщение в Firebase
             await saveMessageToFirebase(message);
             
-            // Сохраняем сообщение локально
-            saveMessage(message);
-            
-            // Отображаем сообщение
-            addMessageToChat(message);
-            
             // Очищаем поле ввода
             messageInput.value = '';
             
@@ -823,7 +942,6 @@ async function sendMessage() {
             updateChatsList();
         } catch (error) {
             console.error('Ошибка при отправке сообщения:', error);
-            alert('Ошибка при отправке сообщения');
         }
     }
 }
@@ -833,21 +951,48 @@ async function saveMessageToFirebase(message) {
     try {
         const chatId = getChatId(message.senderId, message.receiverId);
         
+        // Определяем текст для последнего сообщения в чате
+        let lastMessageText = '';
+        if (message.type === 'image') {
+            lastMessageText = '🖼️ Изображение';
+        } else if (message.type === 'file') {
+            lastMessageText = `📎 ${message.fileName}`;
+        } else {
+            lastMessageText = message.text || '';
+        }
+        
         // Сохраняем сообщение в коллекцию messages
-        await addDoc(collection(db, "messages"), {
+        const messageData = {
             chatId: chatId,
             messageId: message.id,
             text: message.text,
             senderId: message.senderId,
             receiverId: message.receiverId,
             timestamp: message.timestamp,
+            type: message.type || 'text',
             createdAt: Date.now()
-        });
+        };
+        
+        // Добавляем данные файла если это файл или изображение
+        if (message.type === 'image' || message.type === 'file') {
+            messageData.fileName = message.fileName;
+            messageData.fileSize = message.fileSize;
+            messageData.fileType = message.fileType;
+            messageData.fileData = message.fileData;
+            messageData.mimeType = message.mimeType;
+            
+            // Для изображений добавляем imageData для совместимости
+            if (message.type === 'image') {
+                messageData.imageData = message.imageData || message.fileData;
+            }
+        }
+        
+        await addDoc(collection(db, "messages"), messageData);
         
         // Обновляем или создаем запись в коллекции chats
         await setDoc(doc(db, "chats", chatId), {
             participants: [message.senderId, message.receiverId].sort(),
-            lastMessage: message.text,
+            lastMessage: lastMessageText,
             lastMessageTime: message.timestamp,
             lastMessageSender: message.senderId,
             updatedAt: Date.now()
@@ -944,8 +1089,22 @@ async function getAllUserChats() {
             }
         });
         
-        // Сортируем чаты по времени последнего сообщения
-        chats.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+        // Загружаем закрепленные чаты из localStorage
+        const savedPinnedChats = localStorage.getItem('pinnedChats');
+        if (savedPinnedChats) {
+            pinnedChats = JSON.parse(savedPinnedChats);
+        }
+        
+        // Сортируем чаты: сначала закрепленные, затем по времени последнего сообщения
+        chats.sort((a, b) => {
+            const aPinned = pinnedChats.includes(a.user.id);
+            const bPinned = pinnedChats.includes(b.user.id);
+            
+            if (aPinned && !bPinned) return -1;
+            if (!aPinned && bPinned) return 1;
+            
+            return b.lastMessageTime - a.lastMessageTime;
+        });
         
     } catch (error) {
         console.error('Ошибка при загрузке чатов из Firebase:', error);
@@ -1009,39 +1168,64 @@ function createChatItem(chat) {
     // Определяем текст последнего сообщения
     let lastMessageText = chat.lastMessage || '';
     
+    const isPinned = pinnedChats.includes(chat.user.id);
+    
     div.innerHTML = `
         <img src="${avatar}" alt="${chat.user.username}" class="chat-item-avatar ${avatarClass}">
         <div class="chat-item-info">
-            <div class="chat-item-username">${chat.user.username}</div>
+            <div class="chat-item-username">
+                ${chat.user.username}
+                ${isPinned ? '<span class="pin-icon">📌</span>' : ''}
+            </div>
             <div class="chat-item-last-message">${lastMessageText}</div>
         </div>
     `;
+    
+    // Добавляем обработчик правого клика для контекстного меню
+    div.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        showChatContextMenu(event, chat.user);
+    });
     
     return div;
 }
 
 // Звонки
-function makeCall() {
+async function makeCall() {
     if (!currentChat) return;
     
-    // Показываем модальное окно исходящего звонка
-    const modal = document.getElementById('outgoingCallModal');
-    const avatar = document.getElementById('outgoingCallAvatar');
-    const username = document.getElementById('outgoingCallName');
-    
-    // Заполняем данные пользователя
-    avatar.src = getUserAvatar(currentChat);
-    username.textContent = currentChat.username;
-    
-    // Показываем модальное окно
-    modal.classList.remove('hidden');
-    
-    // Имитируем звонок - через 2 секунды показываем входящий звонок у собеседника
-    setTimeout(() => {
-        // В реальном приложении здесь был бы WebRTC вызов
-        // Пока что просто показываем, что звонок идет
+    try {
+        // Создаем запись о звонке в Firebase
+        const callId = Date.now().toString();
+        await setDoc(doc(db, "calls", callId), {
+            callId: callId,
+            callerId: currentUser.id,
+            callerName: currentUser.username,
+            receiverId: currentChat.id,
+            receiverName: currentChat.username,
+            status: 'outgoing', // outgoing, incoming, active, ended
+            timestamp: Date.now(),
+            createdAt: Date.now()
+        });
+        
+        // Показываем модальное окно исходящего звонка
+        const modal = document.getElementById('outgoingCallModal');
+        const avatar = document.getElementById('outgoingCallAvatar');
+        const username = document.getElementById('outgoingCallName');
+        
+        // Заполняем данные пользователя
+        avatar.src = getUserAvatar(currentChat);
+        username.textContent = currentChat.username;
+        
+        // Показываем модальное окно
+        modal.classList.remove('hidden');
+        
         console.log(`Звонок пользователю ${currentChat.username}...`);
-    }, 2000);
+        
+    } catch (error) {
+        console.error('Ошибка при создании звонка:', error);
+        alert('Ошибка при создании звонка');
+    }
 }
 
 // Отменить исходящий звонок
@@ -1049,31 +1233,124 @@ function cancelOutgoingCall() {
     document.getElementById('outgoingCallModal').classList.add('hidden');
 }
 
+// Показать входящий звонок
+function showIncomingCall(callData) {
+    const modal = document.getElementById('incomingCallModal');
+    const avatar = document.getElementById('callerAvatar');
+    const name = document.getElementById('callerName');
+    const username = document.getElementById('callerUsername');
+    
+    // Находим данные звонящего
+    const caller = allUsers.find(u => u.id === callData.callerId);
+    if (caller) {
+        avatar.src = getUserAvatar(caller);
+        name.textContent = caller.username;
+        username.textContent = caller.username;
+    }
+    
+    // Сохраняем данные звонка
+    activeCall = callData;
+    
+    // Показываем модальное окно
+    modal.classList.remove('hidden');
+    
+    // Автоматически завершаем звонок через 30 секунд, если не принят
+    setTimeout(() => {
+        if (activeCall && activeCall.status === 'outgoing') {
+            declineCall();
+        }
+    }, 30000);
+}
+
 // Принять звонок
-function acceptCall() {
-    document.getElementById('incomingCallModal').classList.add('hidden');
-    document.getElementById('activeCallModal').classList.remove('hidden');
+async function acceptCall() {
+    if (!activeCall) return;
+    
+    try {
+        // Обновляем статус звонка в Firebase
+        await setDoc(doc(db, "calls", activeCall.callId), {
+            ...activeCall,
+            status: 'active',
+            answeredAt: Date.now()
+        }, { merge: true });
+        
+        document.getElementById('incomingCallModal').classList.add('hidden');
+        document.getElementById('activeCallModal').classList.remove('hidden');
+        
+        // Начинаем таймер звонка
+        startCallTimer();
+        
+    } catch (error) {
+        console.error('Ошибка при принятии звонка:', error);
+    }
+}
+
+// Показать активный звонок
+function showActiveCall(callData) {
+    const modal = document.getElementById('activeCallModal');
+    const avatar = document.getElementById('activeCallAvatar');
+    const name = document.getElementById('activeCallName');
+    
+    // Определяем собеседника
+    const otherUserId = callData.callerId === currentUser.id ? callData.receiverId : callData.callerId;
+    const otherUser = allUsers.find(u => u.id === otherUserId);
+    
+    if (otherUser) {
+        avatar.src = getUserAvatar(otherUser);
+        name.textContent = otherUser.username;
+    }
+    
+    // Показываем модальное окно
+    modal.classList.remove('hidden');
     
     // Начинаем таймер звонка
     startCallTimer();
 }
 
 // Отклонить звонок
-function declineCall() {
-    document.getElementById('incomingCallModal').classList.add('hidden');
-    if (activeCall) {
+async function declineCall() {
+    if (!activeCall) return;
+    
+    try {
+        // Обновляем статус звонка в Firebase
+        await setDoc(doc(db, "calls", activeCall.callId), {
+            ...activeCall,
+            status: 'ended',
+            endedAt: Date.now(),
+            endedBy: currentUser.id
+        }, { merge: true });
+        
+        document.getElementById('incomingCallModal').classList.add('hidden');
         activeCall = null;
+        
+    } catch (error) {
+        console.error('Ошибка при отклонении звонка:', error);
     }
 }
 
 // Завершить звонок
-function endCall() {
-    document.getElementById('activeCallModal').classList.add('hidden');
-    if (callTimer) {
-        clearInterval(callTimer);
-        callTimer = null;
+async function endCall() {
+    if (!activeCall) return;
+    
+    try {
+        // Обновляем статус звонка в Firebase
+        await setDoc(doc(db, "calls", activeCall.callId), {
+            ...activeCall,
+            status: 'ended',
+            endedAt: Date.now(),
+            endedBy: currentUser.id
+        }, { merge: true });
+        
+        document.getElementById('activeCallModal').classList.add('hidden');
+        if (callTimer) {
+            clearInterval(callTimer);
+            callTimer = null;
+        }
+        activeCall = null;
+        
+    } catch (error) {
+        console.error('Ошибка при завершении звонка:', error);
     }
-    activeCall = null;
 }
 
 // Переключить микрофон
@@ -1125,11 +1402,11 @@ function openImageUpload() {
 }
 
 // Обработка загрузки файлов для отправки
-function handleFileUpload(event) {
+async function handleFileUpload(event) {
     const file = event.target.files[0];
     if (file && currentChat) {
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = async function(e) {
             const fileData = e.target.result;
             
             // Определяем тип файла
@@ -1154,17 +1431,18 @@ function handleFileUpload(event) {
                 message.imageData = fileData;
             }
             
-            // Сохраняем сообщение
-            saveMessage(message);
-            
-            // Отображаем сообщение
-            addMessageToChat(message);
-            
-            // Обновляем список чатов
-            updateChatsList();
-            
-            // Очищаем input файла
-            event.target.value = '';
+            try {
+                // Сохраняем сообщение в Firebase
+                await saveMessageToFirebase(message);
+                
+                // Очищаем input файла
+                event.target.value = '';
+                
+                // Обновляем список чатов
+                updateChatsList();
+            } catch (error) {
+                console.error('Ошибка при отправке файла:', error);
+            }
         };
         reader.readAsDataURL(file);
     }
@@ -1488,6 +1766,207 @@ function deleteMessageForEveryone() {
     hideMessageContextMenu();
 }
 
+// Показать контекстное меню чата
+function showChatContextMenu(event, user) {
+    event.preventDefault();
+    
+    // Скрываем существующее контекстное меню
+    hideChatContextMenu();
+    
+    const contextMenu = document.getElementById('chatContextMenu');
+    const isPinned = pinnedChats.includes(user.id);
+    
+    // Обновляем текст кнопки закрепления
+    const pinButton = contextMenu.querySelector('.pin-chat-btn');
+    pinButton.textContent = isPinned ? 'Открепить чат' : 'Закрепить чат';
+    
+    // Показываем контекстное меню
+    contextMenu.style.display = 'block';
+    contextMenu.style.left = event.pageX - 10 + 'px';
+    contextMenu.style.top = event.pageY - 10 + 'px';
+    
+    // Сохраняем выбранного пользователя
+    selectedChatUser = user;
+    
+    // Добавляем обработчик клика вне меню для его скрытия
+    document.addEventListener('click', hideChatContextMenu);
+}
+
+// Скрыть контекстное меню чата
+function hideChatContextMenu() {
+    const contextMenu = document.getElementById('chatContextMenu');
+    contextMenu.style.display = 'none';
+    document.removeEventListener('click', hideChatContextMenu);
+}
+
+// Закрепить сообщение
+async function pinMessage() {
+    if (!selectedMessage || !currentChat) return;
+    
+    try {
+        const chatId = getChatId(currentUser.id, currentChat.id);
+        
+        // Сохраняем закрепленное сообщение в Firebase
+        await setDoc(doc(db, "pinnedMessages", chatId), {
+            chatId: chatId,
+            messageId: selectedMessage.id,
+            messageText: selectedMessage.text,
+            senderId: selectedMessage.senderId,
+            senderName: selectedMessage.senderName || getUserById(selectedMessage.senderId)?.username || 'Неизвестный',
+            timestamp: Date.now(),
+            createdAt: Date.now()
+        });
+        
+        // Обновляем локальное состояние
+        pinnedMessages[chatId] = selectedMessage.id;
+        localStorage.setItem('pinnedMessages', JSON.stringify(pinnedMessages));
+        
+        // Обновляем отображение закрепленного сообщения
+        updatePinnedMessageDisplay();
+        
+        // Скрываем контекстное меню
+        hideMessageContextMenu();
+        
+    } catch (error) {
+        console.error('Ошибка при закреплении сообщения:', error);
+    }
+}
+
+// Открепить сообщение
+async function unpinMessage(event) {
+    event.stopPropagation();
+    if (!currentChat) return;
+    
+    try {
+        const chatId = getChatId(currentUser.id, currentChat.id);
+        
+        // Удаляем закрепленное сообщение из Firebase
+        await setDoc(doc(db, "pinnedMessages", chatId), {
+            chatId: chatId,
+            messageId: null,
+            timestamp: Date.now()
+        });
+        
+        // Обновляем локальное состояние
+        delete pinnedMessages[chatId];
+        localStorage.setItem('pinnedMessages', JSON.stringify(pinnedMessages));
+        
+        // Скрываем отображение закрепленного сообщения
+        hidePinnedMessageDisplay();
+        
+    } catch (error) {
+        console.error('Ошибка при откреплении сообщения:', error);
+    }
+}
+
+// Обновить отображение закрепленного сообщения
+function updatePinnedMessageDisplay() {
+    if (!currentChat || !currentPinnedMessage) {
+        hidePinnedMessageDisplay();
+        return;
+    }
+    
+    const container = document.getElementById('pinnedMessageContainer');
+    const senderElement = document.getElementById('pinnedSender');
+    const textElement = document.getElementById('pinnedText');
+    
+    senderElement.textContent = currentPinnedMessage.senderName;
+    
+    // Обрезаем текст если он слишком длинный
+    const maxLength = 50;
+    const text = currentPinnedMessage.messageText;
+    textElement.textContent = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+    
+    container.classList.remove('hidden');
+}
+
+// Скрыть отображение закрепленного сообщения
+function hidePinnedMessageDisplay() {
+    const container = document.getElementById('pinnedMessageContainer');
+    container.classList.add('hidden');
+}
+
+// Прокрутить к закрепленному сообщению
+function scrollToPinnedMessage() {
+    if (!currentPinnedMessage) return;
+    
+    const messageElement = document.querySelector(`[data-message-id="${currentPinnedMessage.messageId}"]`);
+    if (messageElement) {
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Добавляем подсветку
+        messageElement.style.backgroundColor = '#0088cc20';
+        setTimeout(() => {
+            messageElement.style.backgroundColor = '';
+        }, 2000);
+    }
+}
+
+// Загрузить закрепленное сообщение для чата
+async function loadPinnedMessage(chatId) {
+    try {
+        const pinnedDoc = await getDocs(query(collection(db, "pinnedMessages"), where("chatId", "==", chatId)));
+        
+        if (!pinnedDoc.empty) {
+            const pinnedData = pinnedDoc.docs[0].data();
+            if (pinnedData.messageId) {
+                currentPinnedMessage = pinnedData;
+                updatePinnedMessageDisplay();
+                return;
+            }
+        }
+        
+        // Если нет закрепленного сообщения
+        currentPinnedMessage = null;
+        hidePinnedMessageDisplay();
+        
+    } catch (error) {
+        console.error('Ошибка при загрузке закрепленного сообщения:', error);
+        currentPinnedMessage = null;
+        hidePinnedMessageDisplay();
+    }
+}
+
+// Закрепить/открепить чат
+function togglePinChat() {
+    if (!selectedChatUser) return;
+    
+    const userIndex = pinnedChats.indexOf(selectedChatUser.id);
+    
+    if (userIndex === -1) {
+        // Закрепляем чат
+        pinnedChats.push(selectedChatUser.id);
+    } else {
+        // Открепляем чат
+        pinnedChats.splice(userIndex, 1);
+    }
+    
+    // Сохраняем в localStorage
+    localStorage.setItem('pinnedChats', JSON.stringify(pinnedChats));
+    
+    // Обновляем список чатов
+    updateChatsList();
+    
+    // Скрываем контекстное меню
+    hideChatContextMenu();
+}
+
+// Открыть модальное окно ELIXIUM
+function openElixiumModal() {
+    const modal = document.getElementById('elixiumModal');
+    modal.classList.remove('hidden');
+}
+
+// Закрыть модальное окно ELIXIUM
+function closeElixiumModal() {
+    const modal = document.getElementById('elixiumModal');
+    modal.classList.add('hidden');
+}
+
+// Приобрести ELIXIUM
+function purchaseElixium() {
+    window.open('https://t.me/astralesapp', '_blank');
+}
+
 // Функция для синхронизации удаления сообщений между пользователями
 function syncMessageDeletion(messageId, chatId, deleteForAll = false) {
     if (deleteForAll) {
@@ -1542,3 +2021,13 @@ window.showMessageContextMenu = showMessageContextMenu;
 window.deleteMessageForMe = deleteMessageForMe;
 window.deleteMessageForEveryone = deleteMessageForEveryone;
 window.syncMessageDeletion = syncMessageDeletion;
+window.showChatContextMenu = showChatContextMenu;
+window.hideChatContextMenu = hideChatContextMenu;
+window.togglePinChat = togglePinChat;
+window.pinMessage = pinMessage;
+window.unpinMessage = unpinMessage;
+window.scrollToPinnedMessage = scrollToPinnedMessage;
+window.openImageUpload = openImageUpload;
+window.openElixiumModal = openElixiumModal;
+window.closeElixiumModal = closeElixiumModal;
+window.purchaseElixium = purchaseElixium;
