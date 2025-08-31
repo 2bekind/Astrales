@@ -18,6 +18,14 @@
             </div>
         </div>
         
+        <!-- Экран загрузки для аватара -->
+        <div id="avatarLoadingScreen" class="avatar-loading-screen hidden">
+            <div class="avatar-loading-content">
+                <div class="avatar-loading-spinner"></div>
+                <div class="avatar-loading-text">Загрузка...</div>
+            </div>
+        </div>
+        
         <!-- Форма входа/регистрации -->
         <div id="loginForm" class="login-container hidden">
             <div class="login-card">
@@ -216,89 +224,130 @@
                         class="message-input"
                         onkeypress="handleMessageKeyPress(event)"
                     />
-                    <button class="send-image-button" onclick="openImageUpload()" title="Отправить файл">
+                    <button class="send-image-button" onclick="openFileUploadMenu()" title="Отправить файл">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </button>
                     
-                    <button class="send-button" onclick="sendMessage()">Отправить</button>
+                    <button class="send-button" onclick="sendMessage()" title="Отправить">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
                 </div>
                 <input type="file" id="imageUpload" accept="*/*" style="display: none;" onchange="handleFileUpload(event)">
+                <input type="file" id="audioUpload" accept="audio/*" style="display: none;" onchange="handleFileUpload(event)">
+                <input type="file" id="videoUpload" accept="video/*" style="display: none;" onchange="handleFileUpload(event)">
+                <input type="file" id="documentUpload" accept=".pdf,.doc,.docx,.txt,.rtf,.odt" style="display: none;" onchange="handleFileUpload(event)">
+                <input type="file" id="archiveUpload" accept=".zip,.rar,.7z,.tar,.gz" style="display: none;" onchange="handleFileUpload(event)">
             </div>
         </div>
 
-        <!-- Модальное окно настроек профиля -->
+        <!-- Модальное окно настроек профиля (редизайн) -->
         <div id="profileModal" class="modal hidden">
-            <div class="modal-content">
+            <div class="modal-content profile-modal">
                 <div class="modal-header">
-                    <h3>Настройки профиля</h3>
+                    <h3>Профиль</h3>
                     <button class="close-button" onclick="closeProfileSettings()">×</button>
                 </div>
-                <div class="modal-body">
-                    <div class="avatar-section">
-                        <div class="current-avatar">
+                <div class="modal-body profile-layout">
+                    <div class="profile-hero">
+                        <div class="hero-avatar avatar-container">
+                            <div class="avatar-ring ring-outer"></div>
+                            <div class="avatar-ring ring-mid"></div>
+                            <div class="avatar-ring ring-inner"></div>
                             <img id="modalAvatar" src="" alt="Current Avatar">
                         </div>
-                        <div class="avatar-actions">
-                            <label for="avatarUpload" class="upload-button">
-                                Загрузить аватар
-                            </label>
-                            <input type="file" id="avatarUpload" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event)">
+                        <div class="hero-text">
+                            <div class="hero-username" id="profileHeroUsername">@username</div>
+                            <div class="hero-bio" id="profileHeroBio">описание</div>
                         </div>
                     </div>
-                    <div class="username-section">
-                        <label for="newUsername">Имя пользователя:</label>
-                        <input type="text" id="newUsername" class="username-input" placeholder="Введите новое имя">
-                        <button class="save-button" onclick="saveProfileChanges()">Сохранить</button>
+
+                    <div class="profile-actions glass">
+                        <label for="avatarUpload" class="action-btn primary">Загрузить аватар</label>
+                        <input type="file" id="avatarUpload" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event)">
+                        <button class="action-btn" onclick="deleteAvatar()">Удалить аватар</button>
+                        <button class="action-btn" onclick="openFramesModal()">Выбрать рамку</button>
+                        <button class="action-btn" onclick="openStreamerModeModal()">Режим стримера</button>
                     </div>
-                    <div class="bio-section">
-                        <label for="newBio">Описание профиля:</label>
-                        <textarea id="newBio" class="bio-input" placeholder="Расскажите о себе..." maxlength="200" oninput="updateBioCounter()"></textarea>
-                        <div class="bio-counter">
-                            <span id="bioCounter">0</span>/200
+
+                    <div class="profile-edit">
+                        <div class="username-section">
+                            <label for="newUsername">Имя пользователя</label>
+                            <input type="text" id="newUsername" class="username-input" placeholder="Введите новое имя">
                         </div>
-                        <button class="save-button" onclick="saveProfileChanges()">Сохранить</button>
-                    </div>
-                    <div class="frames-section">
-                        <label>Режим стримера</label>
-                        <button class="frames-button" onclick="openStreamerModeModal()">Открыть</button>
-                    </div>
-                    <div class="frames-section">
-                        <label>Рамки:</label>
-                        <button class="frames-button" onclick="openFramesModal()">Выбрать рамку</button>
+                        <div class="bio-section">
+                            <label for="newBio">Описание профиля</label>
+                            <textarea id="newBio" class="bio-input" placeholder="Расскажите о себе..." maxlength="200" oninput="updateBioCounter()"></textarea>
+                            <div class="bio-counter"><span id="bioCounter">0</span>/200</div>
+                        </div>
+                        <div class="username-section">
+                            <label for="newActivity">Активность (игра/приложение)</label>
+                            <input type="text" id="newActivity" class="username-input" placeholder="Например: CS2, Chrome" list="knownAppsList">
+                            <datalist id="knownAppsList">
+                                <option value="CS2"></option>
+                                <option value="Dota 2"></option>
+                                <option value="Minecraft"></option>
+                                <option value="Valorant"></option>
+                                <option value="Fortnite"></option>
+                                <option value="League of Legends"></option>
+                                <option value="GTA V"></option>
+                                <option value="PUBG"></option>
+                                <option value="Apex Legends"></option>
+                                <option value="Rust"></option>
+                                <option value="Roblox"></option>
+                                <option value="Genshin Impact"></option>
+                                <option value="Discord"></option>
+                                <option value="Steam"></option>
+                                <option value="Chrome"></option>
+                                <option value="Firefox"></option>
+                                <option value="Microsoft Edge"></option>
+                                <option value="OBS Studio"></option>
+                                <option value="Spotify"></option>
+                                <option value="Telegram"></option>
+                                <option value="Visual Studio Code"></option>
+                            </datalist>
+                        </div>
+                        <div class="save-row">
+                            <button class="save-button" onclick="saveProfileChanges()">Сохранить</button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Модальное окно профиля пользователя -->
+        <!-- Модальное окно профиля пользователя (редизайн) -->
         <div id="userProfileModal" class="modal hidden">
-            <div class="modal-content user-profile-modal">
+            <div class="modal-content profile-modal">
                 <div class="modal-header">
                     <h3>Профиль пользователя</h3>
                     <button class="close-button" onclick="closeUserProfileModal()">×</button>
                 </div>
-                <div class="modal-body">
-                    <div class="user-profile-avatar">
-                        <div class="avatar-container" style="position: relative;">
+                <div class="modal-body profile-layout">
+                    <div class="profile-hero">
+                        <div class="hero-avatar avatar-container">
+                            <div class="avatar-ring ring-outer"></div>
+                            <div class="avatar-ring ring-mid"></div>
+                            <div class="avatar-ring ring-inner"></div>
                             <img id="userProfileAvatar" src="" alt="User Avatar">
                         </div>
-                    </div>
-                    <div class="user-profile-info">
-                        <h4 id="userProfileUsername">Имя пользователя</h4>
-                        <div class="user-profile-status">
-                            <span class="status-indicator" id="userProfileStatusIndicator"></span>
-                            <span id="userProfileStatusText">В сети</span>
-                        </div>
-                        <div class="user-profile-bio" id="userProfileBio">
-                            <!-- Описание будет добавляться сюда -->
+                        <div class="hero-text">
+                            <div class="hero-username" id="userProfileUsername">@username</div>
+                            <div class="hero-bio" id="userProfileBio">описание</div>
+                            <div class="user-profile-status">
+                                <span class="status-indicator" id="userProfileStatusIndicator"></span>
+                                <span id="userProfileStatusText">В сети</span>
+                            </div>
                         </div>
                     </div>
-                    <div class="user-profile-actions">
-                        <button class="message-user-btn" onclick="closeUserProfileModal()">
-                            Написать сообщение
-                        </button>
+
+                    <div class="profile-actions glass">
+                        <button class="action-btn primary" id="profileActionMessage">Написать сообщение</button>
+                        <button class="action-btn" id="profileActionCall">Позвонить</button>
+                        <button class="action-btn" id="profileActionPin">Закрепить чат</button>
                     </div>
                 </div>
             </div>
