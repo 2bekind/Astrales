@@ -127,6 +127,8 @@ body {
     display: none;
 }
 
+
+
 /* Экран загрузки для аватара */
 .avatar-loading-screen {
     position: fixed;
@@ -633,6 +635,13 @@ body {
     margin-right: 15px;
     object-fit: cover;
     position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.search-result-avatar:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(0, 136, 204, 0.3);
 }
 
 
@@ -711,6 +720,13 @@ body {
     position: relative;
     max-width: 200px;
     max-height: 200px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.chat-item-avatar:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(0, 136, 204, 0.3);
 }
 
 .chat-item-avatar.online {
@@ -742,6 +758,8 @@ body {
     font-size: 12px;
     color: #0088cc;
 }
+
+
 
 .chat-item-last-message { color: #a0a0a0; font-size: 13px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
@@ -1326,6 +1344,17 @@ body {
     width: 128px;
     height: 128px;
     border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hero-avatar:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.hero-avatar:active {
+    transform: scale(0.98);
 }
 .hero-avatar img {
     width: 100%;
@@ -1337,6 +1366,29 @@ body {
 .ring-outer { box-shadow: 0 0 0 8px rgba(255,255,255,0.06); }
 .ring-mid { inset: 10px; box-shadow: 0 0 0 6px rgba(255,255,255,0.06); }
 .ring-inner { inset: 20px; box-shadow: 0 0 0 4px rgba(255,255,255,0.06); }
+
+.avatar-edit-indicator {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #007bff;
+    color: white;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.avatar-edit-indicator:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+}
 
 .hero-text { display: flex; flex-direction: column; gap: 8px; }
 .hero-username { font-size: 40px; line-height: 1.1; color: #fff; font-weight: 600; }
@@ -2235,7 +2287,7 @@ body.streamer-mode .search-result-username::after {
     height: 60px;
     border-radius: 50%;
     background: #666;
-    background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiM0NDQ0NDQiLz4KPHBhdGggZD0iTTIwIDEwQzIyLjA5IDEwIDI0IDExLjkxIDI0IDE0QzI0IDE2LjA5IDIyLjA5IDE4IDIwIDE4QzE3LjkxIDE4IDE2IDE2LjA5IDE2IDE0QzE2IDExLjkxIDE3LjkxIDEwIDIwIDEwWiIgZmlsbD0iI0ZGRkZGRiIvPgo8cGF0aCBkPSJNMjAgMjBDMTYuNjkgMjAgMTQgMjIuNjkgMTQgMjZIMjZDMjYgMjIuNjkgMjMuMzEgMjAgMjAgMjBaIiBmaWxsPSIjRkZGRkZGIi8+Cjwvc3ZnPgo=');
+    background-image: url('images/PorfilePic.png');
     background-size: cover;
 }
 
@@ -3475,3 +3527,7 @@ body.streamer-mode .search-result-username::after {
 .send-image-button {
     display: none !important;
 }
+
+
+
+

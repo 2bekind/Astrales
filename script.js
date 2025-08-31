@@ -28,11 +28,26 @@ import {
     setCurrentChat
 } from './chatSettings.js';
 
+// Импорт модуля управления аватарами
+import { 
+    initializeAvatarManager,
+    changeAvatar,
+    getUserAvatar,
+    getDefaultAvatar,
+    isAvatarProcessing,
+    setAvatarUser
+} from './avatarManager.js';
+
 // Глобальные переменные
 let currentUser = null;
 let isLoggedIn = false;
 let allUsers = []; // Все пользователи в системе
 let currentChat = null; // Текущий активный чат
+
+// Экспортируем глобальные переменные для доступа из других модулей
+window.currentUser = currentUser;
+window.currentChat = currentChat;
+window.allUsers = allUsers;
 let activeCall = null; // Активный звонок
 let callTimer = null; // Таймер звонка
 let callStartTime = null; // Время начала звонка
@@ -52,9 +67,105 @@ const KNOWN_APPS = new Set([
 let soundEnabled = true;
 
 // Глобальные переменные для обоев чата
-let chatWallpapers = {}; // {chatId: wallpaperUrl}
 let longPressTimer = null;
 let isLongPress = false;
+
+// Глобальная переменная для непрочитанных сообщений
+let unreadMessages = {}; // {userId: count}
+
+// Функция подсчета непрочитанных сообщений для пользователя
+async function getUnreadCount(userId) {
+    if (!currentUser || !userId) return 0;
+    
+    try {
+        const chatId = getChatId(currentUser.id, userId);
+        const messagesSnapshot = await getDocs(collection(db, "messages"));
+        let count = 0;
+        
+        messagesSnapshot.forEach(doc => {
+            const messageData = doc.data();
+            if (messageData.chatId === chatId && 
+                messageData.senderId === userId && 
+                messageData.receiverId === currentUser.id &&
+                !messageData.read &&
+                messageData.senderId !== currentUser.id) {
+                count++;
+            }
+        });
+        
+        return count;
+    } catch (error) {
+        console.error('Ошибка при подсчете непрочитанных сообщений:', error);
+        return 0;
+    }
+}
+
+// Функция обновления непрочитанных сообщений для всех чатов
+async function updateUnreadCounts() {
+    if (!currentUser) return;
+    
+    try {
+        const messagesSnapshot = await getDocs(collection(db, "messages"));
+        const newUnreadMessages = {};
+        
+        messagesSnapshot.forEach(doc => {
+            const messageData = doc.data();
+            if (messageData.receiverId === currentUser.id && 
+                !messageData.read && 
+                messageData.senderId !== currentUser.id) {
+                const senderId = messageData.senderId;
+                newUnreadMessages[senderId] = (newUnreadMessages[senderId] || 0) + 1;
+            }
+        });
+        
+        unreadMessages = newUnreadMessages;
+        console.log('Обновлены счетчики непрочитанных сообщений:', unreadMessages);
+    } catch (error) {
+        console.error('Ошибка при обновлении непрочитанных сообщений:', error);
+    }
+}
+
+// Функция отметки сообщений как прочитанных
+async function markMessagesAsRead(userId) {
+    if (!currentUser || !userId) return;
+    
+    try {
+        const chatId = getChatId(currentUser.id, userId);
+        const messagesSnapshot = await getDocs(collection(db, "messages"));
+        
+        const updatePromises = [];
+        messagesSnapshot.forEach(doc => {
+            const messageData = doc.data();
+            if (messageData.chatId === chatId && 
+                messageData.senderId === userId && 
+                messageData.receiverId === currentUser.id &&
+                !messageData.read) {
+                
+                // Обновляем сообщение как прочитанное
+                updatePromises.push(updateDoc(doc.ref, { read: true }));
+            }
+        });
+        
+        if (updatePromises.length > 0) {
+            await Promise.all(updatePromises);
+            console.log(`Отмечено ${updatePromises.length} сообщений как прочитанные для пользователя ${userId}`);
+        }
+        
+        // Обновляем локальный счетчик
+        unreadMessages[userId] = 0;
+        
+        // Обновляем общий счетчик непрочитанных сообщений
+        await updateUnreadCounts();
+        
+        // Принудительно обновляем список чатов
+        setTimeout(() => {
+            updateChatsList();
+        }, 50);
+        
+    } catch (error) {
+        console.error('Ошибка при отметке сообщений как прочитанных:', error);
+    }
+}
 
 // Функция воспроизведения звука уведомления
 function playMessageSound(senderId = null) {
@@ -168,145 +279,263 @@ function hideLoadingScreen() {
     loadingScreen.classList.add('hidden');
 }
 
+
+
 // Проверить премиум статус пользователя
 function isPremiumUser(username) {
     return username === '2bekind';
 }
 
-// Добавить премиум индикатор к аватару
-function addPremiumIndicator(avatarElement, username = null) {
-    if (!avatarElement) return;
-    
-    // Проверяем, есть ли уже индикатор
-    const existingIndicator = avatarElement.parentElement.querySelector('.premium-indicator');
-    if (existingIndicator) return;
-    
-    // Получаем имя пользователя
-    let targetUsername = username;
-    if (!targetUsername) {
-        targetUsername = getUsernameFromAvatar(avatarElement);
-    }
-    
-    if (!isPremiumUser(targetUsername)) return;
-    
-    // Создаем индикатор
-    const indicator = document.createElement('div');
-    indicator.className = 'premium-indicator';
-    
-    // Убеждаемся, что родительский элемент имеет position: relative
-    const parentElement = avatarElement.parentElement;
-    parentElement.style.position = 'relative';
-    
-    // Добавляем индикатор к родительскому элементу аватара
-    parentElement.appendChild(indicator);
+
+
+// Предотвращаем запросы favicon.ico
+if (window.location.pathname === '/favicon.ico') {
+    window.location.href = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiM0NDQ0NDQiLz4KPHBhdGggZD0iTTE2IDhDMTcuNzYgOCAxOSA5LjI0IDE5IDExQzE5IDEyLjc2IDE3Ljc2IDE0IDE2IDE0QzE0LjI0IDE0IDEzIDEyLjc2IDEzIDExQzEzIDkuMjQgMTQuMjQgOCAxNiA4WiIgZmlsbD0iI0ZGRkZGRiIvPgo8cGF0aCBkPSJNMTYgMTZDMTMuMzUgMTYgMTEgMTguMzUgMTEgMjFIMjFDMjEgMTguMzUgMTguNjUgMTYgMTYgMTZaIiBmaWxsPSIjRkZGRkZGIi8+Cjwvc3ZnPgo=';
 }
 
-// Получить имя пользователя из аватара (вспомогательная функция)
-function getUsernameFromAvatar(avatarElement) {
-    // Пытаемся найти имя пользователя в ближайших элементах
-    const chatUserName = avatarElement.closest('.chat-user-info')?.querySelector('#chatUserName');
-    if (chatUserName) return chatUserName.textContent;
-    
-    const searchResultUsername = avatarElement.closest('.search-result-item')?.querySelector('.search-result-username');
-    if (searchResultUsername) return searchResultUsername.textContent;
-    
-    const chatItemUsername = avatarElement.closest('.chat-item')?.querySelector('.chat-item-username');
-    if (chatItemUsername) return chatItemUsername.textContent;
-    
-    const userProfileUsername = avatarElement.closest('.user-profile-modal')?.querySelector('#userProfileUsername');
-    if (userProfileUsername) return userProfileUsername.textContent;
-    
-    // Если не найдено, возвращаем null
-    return null;
-}
+// Перехватываем запросы favicon.ico
+const originalFetch = window.fetch;
+window.fetch = function(url, options) {
+    if (typeof url === 'string' && url.includes('favicon.ico')) {
+        return Promise.resolve(new Response('', { status: 404 }));
+    }
+    return originalFetch.apply(this, arguments);
+};
+
+// Перехватываем XMLHttpRequest запросы favicon.ico
+const originalXHROpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+    if (typeof url === 'string' && url.includes('favicon.ico')) {
+        this.abort();
+        return;
+    }
+    return originalXHROpen.apply(this, arguments);
+};
+
+// Перехватываем создание элементов img с favicon.ico
+const originalCreateElement = document.createElement;
+document.createElement = function(tagName) {
+    const element = originalCreateElement.call(this, tagName);
+    if (tagName.toLowerCase() === 'img') {
+        const originalSetAttribute = element.setAttribute;
+        element.setAttribute = function(name, value) {
+            if (name === 'src' && typeof value === 'string' && value.includes('favicon.ico')) {
+                return;
+            }
+            return originalSetAttribute.call(this, name, value);
+        };
+    }
+    return element;
+};
+
+// Перехватываем создание элементов link с favicon.ico
+const originalAppendChild = Node.prototype.appendChild;
+Node.prototype.appendChild = function(child) {
+    if (child.tagName && child.tagName.toLowerCase() === 'link') {
+        const href = child.getAttribute('href');
+        if (href && href.includes('favicon.ico')) {
+            return child; // Возвращаем элемент без добавления в DOM
+        }
+    }
+    return originalAppendChild.call(this, child);
+};
+
+// Перехватываем insertBefore для элементов link с favicon.ico
+const originalInsertBefore = Node.prototype.insertBefore;
+Node.prototype.insertBefore = function(newNode, referenceNode) {
+    if (newNode.tagName && newNode.tagName.toLowerCase() === 'link') {
+        const href = newNode.getAttribute('href');
+        if (href && href.includes('favicon.ico')) {
+            return newNode; // Возвращаем элемент без добавления в DOM
+        }
+    }
+    return originalInsertBefore.call(this, newNode, referenceNode);
+};
+
+// Перехватываем innerHTML для предотвращения добавления favicon.ico
+const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+Object.defineProperty(Element.prototype, 'innerHTML', {
+    set: function(value) {
+        if (typeof value === 'string' && value.includes('favicon.ico')) {
+            value = value.replace(/href\s*=\s*["'][^"']*favicon\.ico[^"']*["']/gi, '');
+        }
+        originalInnerHTML.set.call(this, value);
+    },
+    get: originalInnerHTML.get
+});
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async function() {
+    console.log('DOM загружен, начинаем инициализацию...');
+    
     try {
-        // Запускаем анимацию точек
-        const loadingInterval = animateLoadingDots();
-        
-        // Загружаем всех пользователей из Firebase
-        await loadAllUsersFromFirebase();
-        
-        // Настраиваем слушатель изменений в реальном времени
-        setupRealtimeUsersListener();
-        
-        // Проверяем, есть ли сохраненный пользователь
-        const savedUser = localStorage.getItem('astralesUser');
-        if (savedUser) {
-            currentUser = JSON.parse(savedUser);
-            isLoggedIn = true;
-            
-            // Устанавливаем текущего пользователя в модуле настроек
-            setCurrentUser(currentUser);
-            
-            hideLoadingScreen();
-            showChatList();
-        } else {
+        // Проверяем флаг принудительного скрытия загрузки
+        const forceHide = localStorage.getItem('forceHideLoading');
+        if (forceHide === 'true') {
+            console.log('Обнаружен флаг принудительного скрытия загрузки');
+            localStorage.removeItem('forceHideLoading');
             hideLoadingScreen();
             showLoginForm();
+            return;
         }
+
+        console.log('Запускаем анимацию загрузки...');
+        // Запускаем анимацию точек
+        const loadingInterval = animateLoadingDots();
+        window.loadingInterval = loadingInterval; // Сохраняем для возможности очистки
         
-        // Настраиваем отслеживание видимости страницы
-        setupPageVisibilityTracking();
+        // Устанавливаем таймаут для предотвращения зависания
+        const loadingTimeout = setTimeout(() => {
+            console.warn('Таймаут загрузки - принудительно скрываем экран загрузки');
+            hideLoadingScreen();
+            showLoginForm();
+            clearInterval(loadingInterval);
+        }, 15000); // 15 секунд таймаут
+        window.loadingTimeout = loadingTimeout; // Сохраняем для возможности очистки
         
-        // Загружаем настройки звука
-        loadSoundSettings();
-        
-        // Останавливаем анимацию точек
-        clearInterval(loadingInterval);
-        
-        // Добавляем новые инициализации
-        setupLongPressHandlers();
-        setupMobileAutoRefresh();
-        // Загружаем обои до инициализации настроек, чтобы кэш был готов
-        await loadChatWallpapers();
-        
-        // Инициализируем настройки чата
-        initializeChatSettings();
-        
-        // Очищаем старые файлы при запуске
-        cleanupOldFiles();
+        try {
+            console.log('Начинаем загрузку данных из Firebase...');
+            // Загружаем всех пользователей из Firebase
+            await loadAllUsersFromFirebase();
+            console.log('Загрузка пользователей завершена');
+            
+            console.log('Настраиваем слушатели в реальном времени...');
+            // Настраиваем слушатель изменений в реальном времени
+            setupRealtimeUsersListener();
+            console.log('Слушатели настроены');
+            
+            // Проверяем, есть ли сохраненный пользователь
+            const savedUser = localStorage.getItem('astralesUser');
+            if (savedUser) {
+                console.log('Найден сохраненный пользователь, восстанавливаем сессию...');
+                currentUser = JSON.parse(savedUser);
+                
+                // Проверяем, есть ли сохраненная аватарка
+                const savedAvatar = localStorage.getItem('astralesUserAvatar');
+                if (savedAvatar && !currentUser.avatar) {
+                    currentUser.avatar = savedAvatar;
+                }
+                
+                isLoggedIn = true;
+                
+                // Обновляем глобальную ссылку
+                window.currentUser = currentUser;
+                
+                // Устанавливаем текущего пользователя в модуле настроек
+                setCurrentUser(currentUser);
+                
+                // Инициализируем модуль аватаров
+                initializeAvatarManager(currentUser);
+                
+                hideLoadingScreen();
+                showChatList();
+                console.log('Сессия восстановлена, показан список чатов');
+            } else {
+                console.log('Сохраненный пользователь не найден, показываем форму входа');
+                hideLoadingScreen();
+                showLoginForm();
+            }
+            
+            console.log('Настраиваем дополнительные компоненты...');
+            // Настраиваем отслеживание видимости страницы
+            setupPageVisibilityTracking();
+            
+            // Загружаем настройки звука
+            loadSoundSettings();
+            
+            // Останавливаем анимацию точек
+            clearInterval(loadingInterval);
+            
+            // Добавляем новые инициализации
+            setupLongPressHandlers();
+            setupMobileAutoRefresh();
+            
+            // Загружаем обои до инициализации настроек, чтобы кэш был готов
+            await loadChatWallpapers();
+            
+            // Инициализируем настройки чата
+            initializeChatSettings();
+            
+            // Инициализируем счетчики непрочитанных сообщений
+            if (isLoggedIn && currentUser) {
+                await updateUnreadCounts();
+            }
+            
+            // Очищаем старые файлы при запуске
+            cleanupOldFiles();
+            
+            // Очищаем таймаут если все прошло успешно
+            clearTimeout(loadingTimeout);
+            window.loadingTimeout = null;
+            console.log('Инициализация завершена успешно');
+            
+        } catch (firebaseError) {
+            console.error('Ошибка Firebase:', firebaseError);
+            // При ошибке Firebase все равно показываем форму входа
+            hideLoadingScreen();
+            showLoginForm();
+            clearTimeout(loadingTimeout);
+            window.loadingTimeout = null;
+        }
         
     } catch (error) {
         console.error('Ошибка при инициализации:', error);
         hideLoadingScreen();
+        showLoginForm();
     }
 });
 
 // Загрузка всех пользователей из Firebase
 async function loadAllUsersFromFirebase() {
     try {
-        console.log('Загружаем пользователей из Firebase...');
-        const usersSnapshot = await getDocs(collection(db, "users"));
-        allUsers = [];
+        console.log('Начинаем загрузку пользователей из Firebase...');
         
-        usersSnapshot.forEach(doc => {
-            const userData = doc.data();
-            allUsers.push({
-                id: doc.id,
-                username: userData.username,
-                avatar: userData.avatar || null,
-                online: userData.online || false,
-                lastSeen: userData.lastSeen || null,
-                selectedFrame: userData.selectedFrame || null,
-                bio: userData.bio || null,
-                activity: userData.activity || null
-            });
+        // Добавляем таймаут для операции Firebase
+        const firebaseTimeout = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Firebase timeout')), 10000);
         });
         
-        console.log('Загружено пользователей:', allUsers.length);
+        const loadUsersPromise = (async () => {
+            console.log('Выполняем запрос к Firebase...');
+            const usersSnapshot = await getDocs(collection(db, "users"));
+            console.log('Получен ответ от Firebase, обрабатываем данные...');
+            
+            allUsers = [];
+            
+            usersSnapshot.forEach(doc => {
+                const userData = doc.data();
+                allUsers.push({
+                    id: doc.id,
+                    username: userData.username,
+                    avatar: userData.avatar || null,
+                    online: userData.online || false,
+                    lastSeen: userData.lastSeen || null,
+                    selectedFrame: userData.selectedFrame || null,
+                    bio: userData.bio || null,
+                    activity: userData.activity || null
+                });
+            });
+            
+            console.log('Загружено пользователей:', allUsers.length);
+            
+            // Сохраняем в localStorage для кэширования
+            localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
+            console.log('Пользователи сохранены в localStorage');
+        })();
         
-        // Сохраняем в localStorage для кэширования
-        localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
+        // Ждем либо завершения загрузки, либо таймаута
+        await Promise.race([loadUsersPromise, firebaseTimeout]);
+        
     } catch (error) {
         console.error('Ошибка при загрузке пользователей:', error);
+        
         // Если не удалось загрузить из Firebase, используем localStorage
         const savedUsers = localStorage.getItem('astralesAllUsers');
         if (savedUsers) {
+            console.log('Используем кэшированных пользователей из localStorage');
             allUsers = JSON.parse(savedUsers);
         } else {
+            console.log('Нет кэшированных пользователей, используем пустой массив');
             allUsers = [];
         }
     }
@@ -364,20 +593,47 @@ function setupRealtimeUsersListener() {
                 
                 // Если это новое сообщение и мы получатель
                 if (change.type === 'added' && messageData.receiverId === currentUser.id) {
-                    // Воспроизводим звук уведомления
-                    playMessageSound(messageData.senderId);
+                    // Воспроизводим звук уведомления только если сообщение не от нас самих
+                    if (messageData.senderId !== currentUser.id) {
+                        playMessageSound(messageData.senderId);
+                    }
+                    
+                    // Обновляем счетчик непрочитанных сообщений
+                    if (!messageData.read && messageData.senderId !== currentUser.id) {
+                        const senderId = messageData.senderId;
+                        unreadMessages[senderId] = (unreadMessages[senderId] || 0) + 1;
+                        console.log(`Новое непрочитанное сообщение от ${senderId}, всего: ${unreadMessages[senderId]}`);
+                    }
+                }
+                
+                // Если сообщение было изменено (например, отмечено как прочитанное)
+                if (change.type === 'modified' && messageData.receiverId === currentUser.id) {
+                    // Обновляем счетчик непрочитанных сообщений
+                    if (messageData.read && messageData.senderId !== currentUser.id) {
+                        const senderId = messageData.senderId;
+                        if (unreadMessages[senderId] && unreadMessages[senderId] > 0) {
+                            unreadMessages[senderId]--;
+                            if (unreadMessages[senderId] <= 0) {
+                                delete unreadMessages[senderId];
+                            }
+                            console.log(`Сообщение от ${senderId} отмечено как прочитанное, осталось: ${unreadMessages[senderId] || 0}`);
+                        }
+                    }
                 }
             });
             
-            // Если пользователь находится в чате, обновляем сообщения
-            if (isLoggedIn && currentChat && document.getElementById('userChat').classList.contains('hidden') === false) {
-                loadChatMessages(currentChat.id);
-            }
-            
-            // Обновляем список чатов, если пользователь находится в списке чатов
-            if (isLoggedIn && document.getElementById('chatList').classList.contains('hidden') === false) {
-                updateChatsList();
-            }
+            // Обновляем общий счетчик непрочитанных сообщений
+            updateUnreadCounts().then(() => {
+                // Если пользователь находится в чате, обновляем сообщения
+                if (isLoggedIn && currentChat && document.getElementById('userChat').classList.contains('hidden') === false) {
+                    loadChatMessages(currentChat.id);
+                }
+                
+                // Обновляем список чатов, если пользователь находится в списке чатов
+                if (isLoggedIn && document.getElementById('chatList').classList.contains('hidden') === false) {
+                    updateChatsList();
+                }
+            });
         });
         
         // Слушатель звонков
@@ -452,19 +708,7 @@ async function refreshUsersList() {
     }
 }
 
-// Получить аватар пользователя (с дефолтным значением)
-function getUserAvatar(user) {
-    if (user && user.avatar) {
-        return user.avatar;
-    }
-    // Возвращаем дефолтный аватар (человечек)
-    return getDefaultAvatar();
-}
 
-// Получить дефолтный аватар (человечек)
-function getDefaultAvatar() {
-    return "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiM0NDQ0NDQiLz4KPHBhdGggZD0iTTIwIDEwQzIyLjA5IDEwIDI0IDExLjkxIDI0IDE0QzI0IDE2LjA5IDIyLjA5IDE4IDIwIDE4QzE3LjkxIDE4IDE2IDE2LjA5IDE2IDE0QzE2IDExLjkxIDE3LjkxIDEwIDIwIDEwWiIgZmlsbD0iI0ZGRkZGRiIvPgo8cGF0aCBkPSJNMjAgMjBDMTYuNjkgMjAgMTQgMjIuNjkgMTQgMjZIMjZDMjYgMjIuNjkgMjMuMzEgMjAgMjAgMjBaIiBmaWxsPSIjRkZGRkZGIi8+Cjwvc3ZnPgo=";
-}
 
 // Форматирование времени в Москве (MSK), только часы:минуты
 function formatMoscowTime(timestamp) {
@@ -526,40 +770,11 @@ function getPresenceText(user) {
     return getLastSeenText(user);
 }
 
-// Показать экран загрузки аватара
-function showAvatarLoading() {
-    const loadingScreen = document.getElementById('avatarLoadingScreen');
-    if (loadingScreen) {
-        loadingScreen.classList.remove('hidden');
-    }
-}
 
-// Скрыть экран загрузки аватара
-function hideAvatarLoading() {
-    const loadingScreen = document.getElementById('avatarLoadingScreen');
-    if (loadingScreen) {
-        loadingScreen.classList.add('hidden');
-    }
-}
 
-// Принудительно обновить все аватары в интерфейсе
-async function forceUpdateAllAvatars() {
-    // Обновляем основной аватар в хедере
-    updateUserAvatar();
-    
-    // Обновляем аватар в модалке профиля
-    const modalAvatar = document.getElementById('modalAvatar');
-    if (modalAvatar) {
-        if (currentUser && currentUser.avatar) {
-            modalAvatar.src = currentUser.avatar + '?t=' + Date.now();
-        } else {
-            modalAvatar.src = getDefaultAvatar() + '?t=' + Date.now();
-        }
-    }
-    
-    // Небольшая задержка для завершения обновления
-    await new Promise(resolve => setTimeout(resolve, 500));
-}
+
+
+
 
 // Сохранить пользователя в общий список
 async function saveUserToAllUsers(user) {
@@ -575,21 +790,22 @@ async function saveUserToAllUsers(user) {
     // Сохраняем в localStorage
     localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
     
-            // Также обновляем в Firebase (если это не новый пользователь)
-        if (user.id) {
-            try {
-                await setDoc(doc(db, "users", user.id), {
-                    username: user.username,
-                    avatar: user.avatar,
-                    online: user.online,
-                    lastSeen: Date.now(),
-                    selectedFrame: user.selectedFrame,
-                    bio: user.bio
-                }, { merge: true });
-            } catch (error) {
-                console.error('Ошибка при сохранении пользователя в Firebase:', error);
-            }
+    // Также обновляем в Firebase (если это не новый пользователь)
+    if (user.id) {
+        try {
+            await setDoc(doc(db, "users", user.id), {
+                username: user.username,
+                avatar: user.avatar,
+                online: user.online,
+                lastSeen: Date.now(),
+                selectedFrame: user.selectedFrame,
+                bio: user.bio,
+                activity: user.activity
+            }, { merge: true });
+        } catch (error) {
+            console.error('Ошибка при сохранении пользователя в Firebase:', error);
         }
+    }
 }
 
 // Открыть модальное окно профиля пользователя
@@ -604,6 +820,9 @@ function openUserProfileModal() {
     const bioContainer = document.getElementById('userProfileBio');
     
     // Заполняем данные пользователя
+    avatar.onerror = () => {
+        avatar.src = getDefaultAvatar();
+    };
     avatar.src = getUserAvatar(currentChat);
     username.textContent = currentChat.username;
     
@@ -635,10 +854,7 @@ function openUserProfileModal() {
         bioContainer.classList.add('empty');
     }
     
-    // Добавляем премиум индикатор если нужно
-    if (isPremiumUser(currentChat.username)) {
-        addPremiumIndicator(avatar, currentChat.username);
-    }
+
     
     // Обновляем статус
     if (currentChat.online) {
@@ -741,10 +957,14 @@ async function handleLogin(event) {
         
         if (userData) {
             const userDataObj = userData.data();
+            
+            // Проверяем, есть ли сохраненная аватарка в localStorage
+            const savedAvatar = localStorage.getItem('astralesUserAvatar');
+            
             currentUser = {
                 id: cred.user.uid,
                 username: username,
-                avatar: userDataObj.avatar || null,
+                avatar: userDataObj.avatar || savedAvatar || null,
                 online: true,
                 lastSeen: null,
                 selectedFrame: userDataObj.selectedFrame || null,
@@ -752,8 +972,14 @@ async function handleLogin(event) {
                 activity: userDataObj.activity || null
             };
             
+            // Обновляем глобальную ссылку
+            window.currentUser = currentUser;
+            
             // Устанавливаем текущего пользователя в модуле настроек
             setCurrentUser(currentUser);
+            
+            // Устанавливаем текущего пользователя в модуле аватаров
+            setAvatarUser(currentUser);
             
             // Сохраняем в localStorage
             localStorage.setItem('astralesUser', JSON.stringify(currentUser));
@@ -774,6 +1000,9 @@ async function handleLogin(event) {
                 allUsers.push({ ...currentUser });
             }
             localStorage.setItem('astralesAllUsers', JSON.stringify(allUsers));
+            
+            // Инициализируем счетчики непрочитанных сообщений
+            await updateUnreadCounts();
             
             showChatList();
         } else {
@@ -864,6 +1093,11 @@ async function handleLogout() {
     // Устанавливаем статус оффлайн перед выходом
     if (currentUser) {
         await setUserOnlineStatus(false);
+        
+        // Сохраняем аватарку в localStorage перед выходом
+        if (currentUser.avatar) {
+            localStorage.setItem('astralesUserAvatar', currentUser.avatar);
+        }
     }
     
     // Очищаем данные текущего пользователя
@@ -891,6 +1125,9 @@ function toggleProfileMenu() {
 
 // Открыть настройки профиля
 function openProfileSettings() {
+    console.log('openProfileSettings вызвана');
+    console.log('currentUser:', currentUser);
+    
     const modal = document.getElementById('profileModal');
     const modalAvatar = document.getElementById('modalAvatar');
     const usernameInput = document.getElementById('newUsername');
@@ -900,17 +1137,44 @@ function openProfileSettings() {
     const heroBio = document.getElementById('profileHeroBio');
     const activityInput = document.getElementById('newActivity');
     
-    // Заполняем текущими данными
-    if (currentUser.avatar) {
-        modalAvatar.src = currentUser.avatar;
-    } else {
-        modalAvatar.src = getDefaultAvatar();
+    console.log('modal:', modal);
+    console.log('modalAvatar:', modalAvatar);
+    console.log('currentUser:', currentUser);
+    
+    if (!modal || !modalAvatar || !currentUser) {
+        console.error('Ошибка при открытии настроек профиля:', {
+            modal: !!modal,
+            modalAvatar: !!modalAvatar,
+            currentUser: !!currentUser
+        });
+        alert('Ошибка при открытии настроек профиля');
+        return;
     }
     
-    // Добавляем выбранную рамку если есть
+    // Инициализируем модуль аватаров если еще не инициализирован
+    initializeAvatarManager(currentUser);
+    
+    // Заполняем текущими данными
+    modalAvatar.onerror = () => {
+        modalAvatar.src = getDefaultAvatar() + '?t=' + Date.now();
+    };
+    modalAvatar.src = getUserAvatar(currentUser) + '?t=' + Date.now();
+    
+    // Очищаем старые классы рамок
     const currentAvatarContainer = modalAvatar.parentElement;
-    if (currentUser.selectedFrame) {
-        currentAvatarContainer.classList.add(currentUser.selectedFrame);
+    if (currentAvatarContainer) {
+        currentAvatarContainer.className = currentAvatarContainer.className.replace(/\b\w+-frame\b/g, '');
+        
+        // Добавляем выбранную рамку если есть
+        if (currentUser.selectedFrame) {
+            currentAvatarContainer.classList.add(currentUser.selectedFrame);
+        }
+    }
+    
+    // Удаляем старые премиум индикаторы
+    const oldIndicator = currentAvatarContainer?.querySelector('.premium-indicator');
+    if (oldIndicator) {
+        oldIndicator.remove();
     }
     
     usernameInput.value = currentUser.username;
@@ -920,16 +1184,19 @@ function openProfileSettings() {
     if (heroBio) heroBio.textContent = currentUser.bio || 'Описание не указано';
     if (activityInput) activityInput.value = currentUser.activity || '';
     
-    // Добавляем премиум индикатор если нужно
-    if (isPremiumUser(currentUser.username)) {
-        addPremiumIndicator(modalAvatar, currentUser.username);
-    }
-    
     // Показываем модальное окно
     modal.classList.remove('hidden');
     
     // Скрываем меню профиля
     document.getElementById('profileMenu').classList.add('hidden');
+    
+    // Обработчики клика на аватар отключены
+    const heroAvatar = document.querySelector('.hero-avatar');
+    if (heroAvatar) {
+        // Убираем курсор pointer и подсказку
+        heroAvatar.style.cursor = 'default';
+        heroAvatar.title = '';
+    }
 }
 
 // Закрыть настройки профиля
@@ -937,102 +1204,14 @@ function closeProfileSettings() {
     document.getElementById('profileModal').classList.add('hidden');
 }
 
-// Обработка загрузки аватара
-async function handleAvatarUpload(event) {
-    const file = event.target.files[0];
-    if (file) {
-        // Показываем экран загрузки
-        showAvatarLoading();
-        
-        const reader = new FileReader();
-        reader.onload = async function(e) {
-            const avatarData = e.target.result;
-            
-            try {
-                // Обновляем аватар в модальном окне с принудительным обновлением
-                const modalAvatar = document.getElementById('modalAvatar');
-                if (modalAvatar) {
-                    modalAvatar.src = avatarData + '?t=' + Date.now();
-                }
-                
-                // Сохраняем аватар в пользователе
-                currentUser.avatar = avatarData;
-                
-                // Сохраняем аватар в Firestore
-                await setDoc(doc(db, "users", currentUser.id), {
-                    username: currentUser.username,
-                    avatar: avatarData,
-                    online: currentUser.online,
-                    lastSeen: Date.now(),
-                    selectedFrame: currentUser.selectedFrame,
-                    bio: currentUser.bio,
-                    activity: currentUser.activity
-                }, { merge: true });
-                
-                // Обновляем localStorage текущего пользователя
-                localStorage.setItem('astralesUser', JSON.stringify(currentUser));
-                
-                // Обновляем в общем списке пользователей
-                saveUserToAllUsers(currentUser);
-                
-                // Принудительно обновляем все аватары
-                await forceUpdateAllAvatars();
-                
-                // Скрываем экран загрузки
-                hideAvatarLoading();
-            } catch (error) {
-                hideAvatarLoading();
-                alert('Ошибка при сохранении аватара: ' + error.message);
-            }
-        };
-        reader.readAsDataURL(file);
-    }
+// Обработчик клика на аватар для смены
+function handleAvatarClick() {
+    // Функция смены аватара отключена
+    console.log('Смена аватара отключена');
+    return;
 }
 
-// Удалить аватар: вернуть дефолтный
-async function deleteAvatar() {
-    if (!currentUser) return;
-    
-    // Показываем экран загрузки
-    showAvatarLoading();
-    
-    try {
-        const defaultAvatar = getDefaultAvatar();
-        // Обновляем локально
-        currentUser.avatar = null;
-        
-        // Применяем в модалке с принудительным обновлением
-        const modalAvatar = document.getElementById('modalAvatar');
-        if (modalAvatar) {
-            modalAvatar.src = defaultAvatar + '?t=' + Date.now();
-        }
-        
-        // Сохраняем в Firestore
-        await setDoc(doc(db, "users", currentUser.id), {
-            username: currentUser.username,
-            avatar: null,
-            online: currentUser.online,
-            lastSeen: Date.now(),
-            selectedFrame: currentUser.selectedFrame,
-            bio: currentUser.bio,
-            activity: currentUser.activity
-        }, { merge: true });
-        
-        // Обновляем localStorage и UI
-        localStorage.setItem('astralesUser', JSON.stringify(currentUser));
-        saveUserToAllUsers(currentUser);
-        
-        // Принудительно обновляем все аватары
-        await forceUpdateAllAvatars();
-        
-        // Скрываем экран загрузки
-        hideAvatarLoading();
-    } catch (e) {
-        console.error('Ошибка при удалении аватара:', e);
-        hideAvatarLoading();
-        alert('Не удалось удалить аватар');
-    }
-}
+
 
 // Сохранение изменений профиля
 async function saveProfileChanges() {
@@ -1091,22 +1270,59 @@ function isUsernameTaken(username) {
 // Обновление аватара пользователя в интерфейсе
 function updateUserAvatar() {
     const userAvatar = document.getElementById('userAvatar');
+    if (!userAvatar) return;
+    
     const profileAvatar = userAvatar.parentElement;
     
-    if (currentUser && currentUser.avatar) {
-        userAvatar.src = currentUser.avatar + '?t=' + Date.now();
-    } else {
-        userAvatar.src = getDefaultAvatar() + '?t=' + Date.now();
+    // Удаляем все классы рамок
+    if (profileAvatar) {
+        profileAvatar.className = profileAvatar.className.replace(/\b\w+-frame\b/g, '');
     }
     
+    // Устанавливаем аватар с обработчиками событий
+    userAvatar.src = getUserAvatar(currentUser) + '?t=' + Date.now();
+    userAvatar.onload = function() {
+        console.log('Аватар обновлен');
+    };
+    userAvatar.onerror = function() {
+        // Тихо используем дефолтный аватар без вывода ошибки в консоль
+        userAvatar.src = getDefaultAvatar() + '?t=' + Date.now();
+    };
+    
     // Добавляем выбранную рамку если есть
-    if (currentUser && currentUser.selectedFrame) {
+    if (currentUser && currentUser.selectedFrame && profileAvatar) {
         profileAvatar.classList.add(currentUser.selectedFrame);
     }
     
-    // Добавляем премиум индикатор если нужно
-    if (currentUser && isPremiumUser(currentUser.username)) {
-        addPremiumIndicator(userAvatar, currentUser.username);
+    // Удаляем старые премиум индикаторы
+    const oldIndicator = profileAvatar?.querySelector('.premium-indicator');
+    if (oldIndicator) {
+        oldIndicator.remove();
+    }
+
+    // Обновляем аватар в чате (если мы в чате)
+    const chatUserAvatar = document.getElementById('chatUserAvatar');
+    if (chatUserAvatar) {
+        chatUserAvatar.onerror = () => {
+            chatUserAvatar.src = getDefaultAvatar() + '?t=' + Date.now();
+        };
+        chatUserAvatar.src = getUserAvatar(currentUser) + '?t=' + Date.now();
+        
+        // Восстанавливаем обработчик клика для собственного профиля
+        if (currentChat && currentChat.id === currentUser.id) {
+            chatUserAvatar.onclick = () => {
+                openProfileSettings();
+            };
+            chatUserAvatar.style.cursor = 'pointer';
+            chatUserAvatar.title = 'Нажмите для настройки профиля';
+        } else if (currentChat && currentChat.id !== currentUser.id) {
+            // Восстанавливаем обработчик клика для профиля другого пользователя
+            chatUserAvatar.onclick = () => {
+                viewUserProfile(currentChat.id);
+            };
+            chatUserAvatar.style.cursor = 'pointer';
+            chatUserAvatar.title = 'Нажмите для просмотра профиля';
+        }
     }
 }
 
@@ -1171,7 +1387,7 @@ function createSearchResultItem(user) {
     
     div.innerHTML = `
         <div class="avatar-container" style="position: relative;">
-            <img src="${avatar}" alt="${user.username}" class="search-result-avatar">
+            <img src="${avatar}" alt="${user.username}" class="search-result-avatar" onerror="this.src='${getDefaultAvatar()}'" onclick="viewUserProfile('${user.id}')" title="Нажмите для просмотра профиля">
         </div>
         <div class="search-result-info">
             <div class="search-result-username">${user.username}</div>
@@ -1186,11 +1402,7 @@ function createSearchResultItem(user) {
         </div>
     `;
     
-    // Добавляем премиум индикатор если нужно
-    const avatarImg = div.querySelector('.search-result-avatar');
-    if (isPremiumUser(user.username)) {
-        addPremiumIndicator(avatarImg, user.username);
-    }
+
     
     return div;
 }
@@ -1199,7 +1411,14 @@ function createSearchResultItem(user) {
 function viewUserProfile(userId) {
     const user = allUsers.find(u => u.id === userId);
     if (user) {
-        alert(`Профиль пользователя ${user.username}\nСтатус: ${user.online ? 'В сети' : 'Не в сети'}`);
+        // Временно устанавливаем currentChat для открытия профиля
+        const originalChat = currentChat;
+        currentChat = user;
+        openUserProfileModal();
+        // Восстанавливаем originalChat после открытия модального окна
+        setTimeout(() => {
+            currentChat = originalChat;
+        }, 100);
     }
 }
 
@@ -1223,7 +1442,31 @@ async function openUserChat(user) {
     
     // Используем аватар пользователя или дефолтный
     const chatUserAvatar = document.getElementById('chatUserAvatar');
+    chatUserAvatar.onerror = () => {
+        chatUserAvatar.src = getDefaultAvatar();
+    };
     chatUserAvatar.src = getUserAvatar(user);
+    
+    // Добавляем обработчик клика для открытия профиля пользователя
+    chatUserAvatar.onclick = () => {
+        viewUserProfile(user.id);
+    };
+    chatUserAvatar.style.cursor = 'pointer';
+    chatUserAvatar.title = 'Нажмите для просмотра профиля';
+    
+    // Если это наш собственный чат, используем наш аватар
+    if (user.id === currentUser.id) {
+        chatUserAvatar.onerror = () => {
+            chatUserAvatar.src = getDefaultAvatar();
+        };
+        chatUserAvatar.src = getUserAvatar(currentUser);
+        
+        // Для собственного профиля открываем настройки профиля
+        chatUserAvatar.onclick = () => {
+            openProfileSettings();
+        };
+        chatUserAvatar.title = 'Нажмите для настройки профиля';
+    }
     
     // Добавляем классы для статуса онлайн или admin
     const onlineStatus = document.querySelector('.online-status');
@@ -1254,10 +1497,15 @@ async function openUserChat(user) {
     // Загружаем сообщения чата
     await loadChatMessages(user.id);
     
-    // Добавляем премиум индикатор если нужно
-    if (isPremiumUser(user.username)) {
-        addPremiumIndicator(chatUserAvatar, user.username);
-    }
+    // Отмечаем сообщения как прочитанные
+    await markMessagesAsRead(user.id);
+    
+    // Принудительно обновляем список чатов чтобы убрать индикатор
+    setTimeout(() => {
+        updateChatsList();
+    }, 100);
+    
+
     
     // Загружаем настройки звука для кнопки в чате
     loadSoundSettings();
@@ -1620,6 +1868,7 @@ async function saveMessageToFirebase(message) {
             receiverId: message.receiverId,
             timestamp: message.timestamp,
             type: message.type || 'text',
+            read: message.senderId === message.receiverId, // Если отправляем себе, то сразу прочитано
             createdAt: Date.now()
         };
         
@@ -1726,6 +1975,9 @@ async function updateChatsList() {
     const chatsList = document.getElementById('chatsList');
     
     try {
+        // Обновляем счетчики непрочитанных сообщений
+        await updateUnreadCounts();
+        
         // Получаем все чаты текущего пользователя
         const userChats = await getAllUserChats();
         
@@ -1769,7 +2021,7 @@ async function getAllUserChats() {
                             lastMessage: chatData.lastMessage || '',
                             lastMessageTime: chatData.lastMessageTime || 0,
                             lastMessageSender: chatData.lastMessageSender || '',
-                            unreadCount: 0 // Можно добавить подсчет непрочитанных
+                            unreadCount: unreadMessages[otherUser.id] || 0
                         });
                     }
                 }
@@ -1824,7 +2076,7 @@ async function getAllUserChats() {
                                     lastMessage: lastMessage.text || '',
                                     lastMessageTime: lastMessage.timestamp || 0,
                                     lastMessageSender: lastMessage.senderId || '',
-                                    unreadCount: 0
+                                    unreadCount: unreadMessages[otherUser.id] || 0
                                 });
                             }
                         }
@@ -1867,9 +2119,13 @@ function createChatItem(chat) {
     
     const isPinned = pinnedChats.includes(chat.user.id);
     
+    // Получаем количество непрочитанных сообщений
+    const unreadCount = unreadMessages[chat.user.id] || 0;
+    console.log(`Создаем чат для ${chat.user.username}, непрочитанных: ${unreadCount}`);
+    
     div.innerHTML = `
         <div class="avatar-container" style="position: relative;">
-            <img src="${avatar}" alt="${chat.user.username}" class="chat-item-avatar ${avatarClass}" data-user-id="${chat.user.id}">
+            <img src="${avatar}" alt="${chat.user.username}" class="chat-item-avatar ${avatarClass}" data-user-id="${chat.user.id}" onerror="this.src='${getDefaultAvatar()}'" onclick="event.stopPropagation(); viewUserProfile('${chat.user.id}')" title="Нажмите для просмотра профиля">
         </div>
         <div class="chat-item-info">
             <div class="chat-item-username">
@@ -1880,11 +2136,7 @@ function createChatItem(chat) {
         </div>
     `;
     
-    // Добавляем премиум индикатор если нужно
-    const avatarImg = div.querySelector('.chat-item-avatar');
-    if (isPremiumUser(chat.user.username)) {
-        addPremiumIndicator(avatarImg, chat.user.username);
-    }
+
     
     // Добавляем обработчик правого клика для контекстного меню
     div.addEventListener('contextmenu', (event) => {
@@ -1919,13 +2171,13 @@ async function makeCall() {
         const username = document.getElementById('outgoingCallName');
         
         // Заполняем данные пользователя
+        avatar.onerror = () => {
+            avatar.src = getDefaultAvatar();
+        };
         avatar.src = getUserAvatar(currentChat);
         username.textContent = currentChat.username;
         
-        // Добавляем премиум индикатор если нужно
-        if (isPremiumUser(currentChat.username)) {
-            addPremiumIndicator(avatar, currentChat.username);
-        }
+
         
         // Показываем модальное окно
         modal.classList.remove('hidden');
@@ -1953,14 +2205,14 @@ function showIncomingCall(callData) {
     // Находим данные звонящего
     const caller = allUsers.find(u => u.id === callData.callerId);
     if (caller) {
+        avatar.onerror = () => {
+            avatar.src = getDefaultAvatar();
+        };
         avatar.src = getUserAvatar(caller);
         name.textContent = caller.username;
         username.textContent = caller.username;
         
-        // Добавляем премиум индикатор если нужно
-        if (isPremiumUser(caller.username)) {
-            addPremiumIndicator(avatar, caller.username);
-        }
+
     }
     
     // Сохраняем данные звонка
@@ -2011,13 +2263,13 @@ function showActiveCall(callData) {
     const otherUser = allUsers.find(u => u.id === otherUserId);
     
     if (otherUser) {
+        avatar.onerror = () => {
+            avatar.src = getDefaultAvatar();
+        };
         avatar.src = getUserAvatar(otherUser);
         name.textContent = otherUser.username;
         
-        // Добавляем премиум индикатор если нужно
-        if (isPremiumUser(otherUser.username)) {
-            addPremiumIndicator(avatar, otherUser.username);
-        }
+
     }
     
     // Показываем модальное окно
@@ -2924,6 +3176,11 @@ function syncMessageDeletion(messageId, chatId, deleteForAll = false) {
 }
 
 // Экспорт функций для использования в HTML
+window.showClearChatsModal = showClearChatsModal;
+window.closeClearChatsModal = closeClearChatsModal;
+window.confirmClearAllChats = confirmClearAllChats;
+window.initializeAvatarManager = initializeAvatarManager;
+window.setAvatarUser = setAvatarUser;
 window.handleLogin = handleLogin;
 window.handleRegister = handleRegister;
 window.switchMode = switchMode;
@@ -2933,8 +3190,13 @@ window.openProfileSettings = openProfileSettings;
 window.closeProfileSettings = closeProfileSettings;
 window.openUserProfileModal = openUserProfileModal;
 window.closeUserProfileModal = closeUserProfileModal;
-window.handleAvatarUpload = handleAvatarUpload;
-window.deleteAvatar = deleteAvatar;
+window.changeAvatar = changeAvatar;
+window.handleAvatarClick = handleAvatarClick;
+window.isAvatarProcessing = isAvatarProcessing;
+window.getUserAvatar = getUserAvatar;
+window.getDefaultAvatar = getDefaultAvatar;
+window.updateUserAvatar = updateUserAvatar;
+window.forceUpdateAllAvatars = forceUpdateAllAvatars;
 window.saveProfileChanges = saveProfileChanges;
 window.handleSearch = handleSearch;
 window.closeSearchResults = closeSearchResults;
@@ -2957,6 +3219,7 @@ window.handleFileUpload = handleFileUpload;
 window.playAudioFile = playAudioFile;
 window.openImageModal = openImageModal;
 window.showMessageContextMenu = showMessageContextMenu;
+
 window.deleteMessageForMe = deleteMessageForMe;
 window.deleteMessageForEveryone = deleteMessageForEveryone;
 window.syncMessageDeletion = syncMessageDeletion;
@@ -3220,7 +3483,7 @@ async function refreshChatMessages() {
         await loadChatMessages(currentChat.id);
         
         // Обновляем список чатов
-        await loadChatsList();
+        updateChatsList();
         
         console.log('Чат обновлен');
     } catch (error) {
@@ -3231,6 +3494,137 @@ async function refreshChatMessages() {
 // Функция для получения файла по ключу
 function getFileByKey(fileKey) {
     return localStorage.getItem(fileKey);
+}
+
+// Показать уведомление об успешном обновлении аватара
+function showAvatarSuccessNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'avatar-success-notification';
+    notification.innerHTML = `
+        <div class="notification-content">
+            <span class="notification-icon">✅</span>
+            <span class="notification-text">${message}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Анимация появления
+    setTimeout(() => notification.classList.add('show'), 10);
+    
+    // Автоматическое скрытие через 3 секунды
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Принудительно обновить аватар в модальном окне
+function forceUpdateModalAvatar() {
+    const modalAvatar = document.getElementById('modalAvatar');
+    if (!modalAvatar || !currentUser) return;
+    
+    // Проверяем валидность аватара
+    const isValidAvatar = currentUser.avatar && 
+        (currentUser.avatar.startsWith('data:') || currentUser.avatar.startsWith('http'));
+    
+    if (isValidAvatar) {
+        modalAvatar.src = currentUser.avatar + '?t=' + Date.now();
+        modalAvatar.onload = function() {
+            console.log('Аватар в модальном окне принудительно обновлен');
+        };
+        modalAvatar.onerror = function() {
+            console.error('Ошибка загрузки аватара в модальном окне, используем дефолтный');
+            modalAvatar.src = getDefaultAvatar() + '?t=' + Date.now();
+        };
+    } else {
+        modalAvatar.src = getDefaultAvatar() + '?t=' + Date.now();
+        modalAvatar.onload = function() {
+            console.log('Дефолтный аватар в модальном окне принудительно обновлен');
+        };
+        modalAvatar.onerror = function() {
+            console.error('Ошибка загрузки дефолтного аватара в модальном окне');
+        };
+    }
+    
+    // Также обновляем рамку и премиум индикатор
+    const modalAvatarContainer = modalAvatar.parentElement;
+    if (modalAvatarContainer) {
+        // Удаляем все классы рамок
+        modalAvatarContainer.className = modalAvatarContainer.className.replace(/\b\w+-frame\b/g, '');
+        
+        // Добавляем выбранную рамку если есть
+        if (currentUser && currentUser.selectedFrame) {
+            modalAvatarContainer.classList.add(currentUser.selectedFrame);
+        }
+        
+        // Удаляем старые премиум индикаторы
+        const oldIndicator = modalAvatarContainer.querySelector('.premium-indicator');
+        if (oldIndicator) {
+            oldIndicator.remove();
+        }
+        
+        // Добавляем премиум индикатор если нужно
+
+    }
+}
+
+// Принудительно обновить все аватары в интерфейсе
+function forceUpdateAllAvatars() {
+    console.log('Начинаем обновление всех аватаров в интерфейсе...');
+    
+    // Обновляем основной аватар в хедере
+    updateUserAvatar();
+    
+    // Обновляем аватар в модалке профиля
+    forceUpdateModalAvatar();
+    
+    // Обновляем аватар в модалке профиля пользователя (если открыта)
+    const userProfileAvatar = document.getElementById('userProfileAvatar');
+    if (userProfileAvatar && currentChat) {
+        const chatAvatar = getUserAvatar(currentChat);
+        userProfileAvatar.src = chatAvatar + '?t=' + Date.now();
+    }
+    
+    // Обновляем аватар в чате (если открыт)
+    const chatUserAvatar = document.getElementById('chatUserAvatar');
+    if (chatUserAvatar && currentChat) {
+        const originalOnClick = chatUserAvatar.onclick;
+        const originalCursor = chatUserAvatar.style.cursor;
+        const originalTitle = chatUserAvatar.title;
+        
+        const chatAvatar = getUserAvatar(currentChat);
+        chatUserAvatar.src = chatAvatar + '?t=' + Date.now();
+        
+        // Восстанавливаем обработчики клика
+        if (originalOnClick) {
+            chatUserAvatar.onclick = originalOnClick;
+        }
+        if (originalCursor) {
+            chatUserAvatar.style.cursor = originalCursor;
+        }
+        if (originalTitle) {
+            chatUserAvatar.title = originalTitle;
+        }
+    }
+    
+    // Принудительно обновляем аватар в модальном окне профиля
+    const modalAvatar = document.getElementById('modalAvatar');
+    if (modalAvatar && currentUser) {
+        const isValidAvatar = currentUser.avatar && 
+            (currentUser.avatar.startsWith('data:') || currentUser.avatar.startsWith('http'));
+        
+        if (isValidAvatar) {
+            modalAvatar.src = currentUser.avatar + '?t=' + Date.now();
+        } else {
+            modalAvatar.src = getDefaultAvatar() + '?t=' + Date.now();
+        }
+    }
+    
+    // Небольшая задержка для завершения обновления
+    setTimeout(() => {
+        console.log('Все аватары в интерфейсе обновлены');
+    }, 100);
 }
 
 // Функция для очистки старых файлов из localStorage

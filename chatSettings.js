@@ -1,5 +1,6 @@
 // Файл для управления настройками чата
 import { db, doc, setDoc, collection, getDocs } from './firebase.js';
+import { getUserAvatar, getDefaultAvatar } from './avatarManager.js';
 
 // Глобальные переменные для настроек чата
 let chatWallpapers = {}; // {combinedChatId: wallpaperUrl}
@@ -28,7 +29,12 @@ export function openChatSettings(chat, allUsers) {
         const usernameElement = document.getElementById('chatSettingsUsername');
         const statusElement = document.getElementById('chatSettingsStatus');
         
-        if (avatarElement) avatarElement.src = partner.avatar || '';
+        if (avatarElement) {
+            avatarElement.onerror = () => {
+                avatarElement.src = getDefaultAvatar();
+            };
+            avatarElement.src = getUserAvatar(partner);
+        }
         if (usernameElement) usernameElement.textContent = partner.username;
         if (statusElement) statusElement.textContent = partner.online ? 'В сети' : 'Не в сети';
     }
